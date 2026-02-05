@@ -375,8 +375,28 @@ const Commitments = () => {
                                                     </div>
                                                 )}
                                             </div>
-                                            <div style={{ fontWeight: '700', color: 'var(--status-red-main)' }}>
-                                                ${Number(c.amount || 0).toLocaleString('es-CL')}
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                                    {(() => {
+                                                        if (!c.last_paid_at) return null;
+                                                        const p = new Date(c.last_paid_at);
+                                                        const n = new Date();
+                                                        const isPaid = p.getMonth() === n.getMonth() && p.getFullYear() === n.getFullYear();
+                                                        if (!isPaid) return null;
+                                                        return (
+                                                            <span style={{
+                                                                background: '#DCFCE7', color: '#166534',
+                                                                fontSize: '0.7rem', fontWeight: '800',
+                                                                padding: '2px 6px', borderRadius: '4px', border: '1px solid #86EFAC'
+                                                            }}>
+                                                                PAGADO
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                    <div style={{ fontWeight: '700', color: 'var(--status-green-main)' }}>
+                                                        ${Math.round(Number(c.amount)).toLocaleString('es-CL')}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -392,16 +412,6 @@ const Commitments = () => {
 
                                                 return (
                                                     <>
-                                                        {isPaidThisMonth && (
-                                                            <div style={{
-                                                                position: 'absolute', top: '10px', right: '10px',
-                                                                background: '#DCFCE7', color: '#166534',
-                                                                fontSize: '0.7rem', fontWeight: '800',
-                                                                padding: '2px 8px', borderRadius: '4px', border: '1px solid #86EFAC'
-                                                            }}>
-                                                                PAGADO
-                                                            </div>
-                                                        )}
                                                         <button
                                                             onClick={() => handleEditOpen(c)}
                                                             style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
