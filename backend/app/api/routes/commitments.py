@@ -39,6 +39,7 @@ def list_commitments(
                 "next_date": data.get("next_date"),
                 "installments_total": data.get("installments_total", 0),
                 "installments_paid": data.get("installments_paid", 0),
+                "last_paid_at": data.get("last_paid_at"),
                 "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
             })
         _CACHE[household_id] = {"ts": now, "data": results}

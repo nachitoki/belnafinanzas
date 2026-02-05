@@ -382,38 +382,63 @@ const Commitments = () => {
 
                                         {/* Actions Bar */}
                                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
-                                            <button
-                                                onClick={() => handleEditOpen(c)}
-                                                style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
-                                            >
-                                                ✏️
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(c.id)}
-                                                style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
-                                            >
-                                                🗑️
-                                            </button>
+                                            {(() => {
+                                                const isPaidThisMonth = (() => {
+                                                    if (!c.last_paid_at) return false;
+                                                    const p = new Date(c.last_paid_at);
+                                                    const n = new Date();
+                                                    return p.getMonth() === n.getMonth() && p.getFullYear() === n.getFullYear();
+                                                })();
 
-                                            <div style={{ width: '1px', background: '#ddd', margin: '0 4px' }}></div>
+                                                return (
+                                                    <>
+                                                        {isPaidThisMonth && (
+                                                            <div style={{
+                                                                position: 'absolute', top: '10px', right: '10px',
+                                                                background: '#DCFCE7', color: '#166534',
+                                                                fontSize: '0.7rem', fontWeight: '800',
+                                                                padding: '2px 8px', borderRadius: '4px', border: '1px solid #86EFAC'
+                                                            }}>
+                                                                PAGADO
+                                                            </div>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleEditOpen(c)}
+                                                            style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(c.id)}
+                                                            style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
+                                                        >
+                                                            🗑️
+                                                        </button>
 
-                                            <button
-                                                onClick={() => handlePostpone(c)}
-                                                style={{ fontSize: '0.7rem', border: '1px solid #ddd', background: 'white', borderRadius: '4px', padding: '2px 6px' }}
-                                            >
-                                                Postergar
-                                            </button>
-                                            <button
-                                                onClick={() => handlePay(c)}
-                                                disabled={actionSavingId === c.id}
-                                                style={{
-                                                    fontSize: '0.75rem', border: 'none',
-                                                    background: actionSavingId === c.id ? '#ddd' : 'var(--status-green-main)',
-                                                    color: 'white', borderRadius: '4px', padding: '4px 10px', fontWeight: '600'
-                                                }}
-                                            >
-                                                {actionSavingId === c.id ? '...' : 'Pagar'}
-                                            </button>
+                                                        <div style={{ width: '1px', background: '#ddd', margin: '0 4px' }}></div>
+
+                                                        <button
+                                                            onClick={() => handlePostpone(c)}
+                                                            disabled={isPaidThisMonth}
+                                                            style={{ fontSize: '0.7rem', border: '1px solid #ddd', background: 'white', borderRadius: '4px', padding: '2px 6px', opacity: isPaidThisMonth ? 0.5 : 1 }}
+                                                        >
+                                                            Postergar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handlePay(c)}
+                                                            disabled={actionSavingId === c.id || isPaidThisMonth}
+                                                            style={{
+                                                                fontSize: '0.75rem', border: 'none',
+                                                                background: (actionSavingId === c.id || isPaidThisMonth) ? '#ddd' : 'var(--status-green-main)',
+                                                                color: (isPaidThisMonth) ? '#666' : 'white',
+                                                                borderRadius: '4px', padding: '4px 10px', fontWeight: '600'
+                                                            }}
+                                                        >
+                                                            {actionSavingId === c.id ? '...' : isPaidThisMonth ? 'Listo' : 'Pagar'}
+                                                        </button>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 ))}
