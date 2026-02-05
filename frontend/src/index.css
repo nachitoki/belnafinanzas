@@ -7,7 +7,11 @@
   --status-yellow-main: #F9A825;
 
   --status-red-bg: #FDECEA;
+  --status-red-bg: #FDECEA;
   --status-red-main: #C62828;
+
+  --status-blue-bg: #E3F2FD;
+  --status-blue-main: #1976D2;
 
   /* Neutrals */
   --color-text-main: #1a202c;
