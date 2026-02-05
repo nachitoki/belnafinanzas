@@ -25,124 +25,172 @@ class DashboardService:
             if (now - _CACHE["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return _CACHE["data"]
 
-        # 1. Fetch Transactions (Last 90 days for baseline context, though logic only uses window?)
-        #Actually logic uses window inside. Passing last 90 days is safe.
-        start_date = now - timedelta(days=14)
-        docs = self.db.collection('households').document(household_id)\
-            .collection('transactions')\
-            .where('occurred_on', '>=', start_date)\
-            .limit(200)\
-            .stream()
+        # 1. Fetch Collections Concurrent-ish (limit 300 each)
+        # We fetch all core collections once to avoid N queries
         
-        transactions = []
-        for doc in docs:
+        # A) Transactions
+        start_date_zone = now - timedelta(days=45)
+        month_start = datetime(now.year, now.month, 1)
+        query_start = min(start_date_zone, month_start) - timedelta(days=1)
+        
+        trans_docs = self.db.collection('households').document(household_id)\
+            .collection('transactions')\
+            .where('occurred_on', '>=', query_start)\
+            .limit(300)\
+            .stream()
+
+        # B) Commitments
+        comm_docs = self.db.collection('households').document(household_id)\
+            .collection('commitments').limit(200).stream()
+        commitments = [d.to_dict() for d in comm_docs]
+
+        # C) Events
+        event_docs = self.db.collection('households').document(household_id)\
+            .collection('events').limit(200).stream()
+        events = [d.to_dict() for d in event_docs]
+
+        # D) Incomes (needed for month overview)
+        income_docs = self.db.collection('households').document(household_id)\
+            .collection('incomes').limit(200).stream()
+        incomes = [d.to_dict() for d in income_docs]
+
+        # Process Transactions
+        all_transactions_data = []
+        transactions_objects = []
+        real_oxigeno = 0.0
+        real_vida = 0.0
+        real_blindaje = 0.0
+        
+        # Categories Map
+        cats_ref = self.db.collection('households').document(household_id)\
+            .collection('categories').stream()
+        cat_map = {c.id: c.to_dict() for c in cats_ref}
+
+        for doc in trans_docs:
             data = doc.to_dict()
-            # Handle timestamps from Firestore
             occurred_on = data.get('occurred_on')
-            if hasattr(occurred_on, 'timestamp'): # DatetimeWithNanoseconds
+            if hasattr(occurred_on, 'timestamp'):
                 occurred_on = datetime.fromtimestamp(occurred_on.timestamp())
-            elif isinstance(occurred_on, str): # Fallback
+            elif isinstance(occurred_on, str):
                 try:
                     occurred_on = datetime.fromisoformat(occurred_on)
                 except:
                     occurred_on = datetime.utcnow()
+            
+            data['parsed_date'] = occurred_on
+            all_transactions_data.append(data)
+            
+            if (now - occurred_on).days <= 30:
+                transactions_objects.append(Transaction(
+                    amount=float(data.get('amount', 0)),
+                    date=occurred_on,
+                    category=data.get('category_id', 'unknown'),
+                    store_id=data.get('store_id'),
+                    product_id=data.get('product_id')
+                ))
 
-            transactions.append(Transaction(
-                amount=float(data.get('amount', 0)),
-                date=occurred_on,
-                category=data.get('category_id', 'unknown'),
-                store_id=data.get('store_id'),
-                product_id=data.get('product_id')
-            ))
+            if occurred_on >= month_start:
+                amt = float(data.get('amount', 0))
+                if amt < 0:
+                    val = abs(amt)
+                    cat_id = data.get('category_id')
+                    cat_data = cat_map.get(cat_id, {}) if cat_id else {}
+                    cat_name = (cat_data.get('name') or "").lower()
+                    if "ahorro" in cat_name or "deuda" in cat_name or "inversion" in cat_name:
+                        real_blindaje += val
+                    elif cat_data.get('essential', False):
+                        real_oxigeno += val
+                    else:
+                        real_vida += val
 
-        # 2. Compute Spending Zone
-        # Current logic computes baseline from THE SAME window transactions.
-        # As noted, this is mathematically quirky (deviation of total vs avg of components),
-        # but we implement AS SPECIFIED.
-        spending_status = compute_spending_zone(transactions, window_days=30)
-        
+        # 2. Spending Zone
+        spending_status = compute_spending_zone(transactions_objects, window_days=30)
         spending_label = "Dentro de lo normal"
         if spending_status == Status.YELLOW:
             spending_label = "Un poco mas alto de lo usual"
         elif spending_status == Status.RED:
             spending_label = "Nos estamos saliendo"
 
-        # 3. Compute Recurring (Mock for now, or simple query)
-        # For MVP, we'll return empty or mock until the Recurring Inference Engine is built.
-        # We'll assume everything is Green.
-        recurring_statuses = []
+        # 3. Compute Horizon Items (Upcoming)
+        # Logic ported from horizon.py
+        horizon_date = now.date() + timedelta(days=60)
+        budget_ref = 2000000
         upcoming_items = []
+
+        def _pdate(v):
+            if not v: return None
+            if hasattr(v, 'date'): return v.date()
+            try: return datetime.fromisoformat(str(v)).date()
+            except: return None
         
-        # 4. Compute Strategic Products (Fetch from products collection)
-        # We need product prices.
-        # Let's fetch 'strategic_products' col
-        products_status_list = []
+        # Commitments Horizon
+        for c in commitments:
+            nd = _pdate(c.get("next_date"))
+            if nd and now.date() <= nd <= horizon_date:
+                upcoming_items.append({
+                    "type": "commitment",
+                    "label": c.get("name"),
+                    "date": nd.isoformat(),
+                    "amount": c.get("amount", 0),
+                    "severity": "high",
+                    "flow_category": c.get("flow_category"),
+                    "provisioned": c.get("flow_category") == "provision",
+                    "impact_pct": round((float(c.get("amount", 0) or 0) / budget_ref) * 100, 1)
+                })
         
+        # Events Horizon
+        for e in events:
+            ed = _pdate(e.get("date"))
+            if not ed or not (now.date() <= ed <= horizon_date):
+                continue
+            amt = float(e.get("amount_estimate", 0) or 0)
+            fc = e.get("flow_category")
+            prov = fc == "provision"
+            
+            # Months logic (simplified)
+            months_left = 0
+            monthly_amt = amt
+            if prov and ed > now.date():
+                months_left = max(1, (ed.year - now.date().year) * 12 + (ed.month - now.date().month) + 1)
+                monthly_amt = round(amt / months_left, 2)
+
+            upcoming_items.append({
+                "type": "event",
+                "label": e.get("name"),
+                "date": ed.isoformat(),
+                "amount": monthly_amt,
+                "original_amount": amt,
+                "provisioned": prov,
+                "months_remaining": months_left if prov else None,
+                "severity": "high" if e.get("is_mandatory", False) else "medium",
+                "flow_category": fc,
+                "impact_pct": round((monthly_amt / budget_ref) * 100, 1)
+            })
+            
+        upcoming_items.sort(key=lambda x: x.get("date", ""))
+        upcoming_items = upcoming_items[:20]
+
         # 5. Global Household Status
+        products_status_list = [] # still skipped for MVP speed
         signals = HouseholdSignals(
             spending=spending_status,
-            recurring=recurring_statuses,
+            recurring=[], 
             products=products_status_list
         )
-        
         household_status = compute_household_status(signals)
         status_msg = household_message(household_status)
 
-        # 6. Compute Real Distribution (Current Month)
-        month_start = datetime(now.year, now.month, 1)
-        
-        # Fetch Categories
-        cats_ref = self.db.collection('households').document(household_id).collection('categories').stream()
-        cat_map = {c.id: c.to_dict() for c in cats_ref}
-        
-        real_oxigeno = 0.0
-        real_vida = 0.0
-        real_blindaje = 0.0
-        
-        # Re-fetch transactions for full current month if needed, or ensure 'transactions' covers it.
-        # Existing query was last 14 days. Let's fix transaction fetching to cover full current month + 30 days window.
-        # But for now, let's just do a dedicated loop for distribution if we change the query above or lazy load.
-        # Optimization: Let's change the top query to be wider: start_date = min(14 days ago, 1st of month)
-        # However, to be safe and clean, I will iterate the 'transactions' list if we expand the query, 
-        # OR just fetch month transactions here. Fetching is safer for correctness.
-        
-        dist_docs = self.db.collection('households').document(household_id)\
-            .collection('transactions')\
-            .where('occurred_on', '>=', month_start)\
-            .stream()
-            
-        for d in dist_docs:
-            data = d.to_dict()
-            amt = float(data.get('amount', 0))
-            if amt >= 0: continue # Skip incomes/transfers, only expenses (negative)
-            
-            # Expense amount is absolute value of negative
-            val = abs(amt)
-            
-            cat_id = data.get('category_id')
-            cat_data = cat_map.get(cat_id, {}) if cat_id else {}
-            cat_name = (cat_data.get('name') or "").lower()
-             
-            # Heuristic: Blindaje
-            if "ahorro" in cat_name or "deuda" in cat_name or "inversion" in cat_name or "inversion" in cat_name:
-                real_blindaje += val
-            elif cat_data.get('essential', False):
-                real_oxigeno += val
-            else:
-                real_vida += val
-                
-        # Get total income for percentages
-        month_overview = self._compute_month_overview(household_id, now, months_ahead=0)
+        # 6. Real Distribution Result
+        month_overview = self._compute_month_overview_memory(
+            incomes, commitments, events, household_id, now, months_ahead=3
+        )
         total_income = month_overview.get('income_total', 0)
         
         dist_result = {
-            "oxigeno": 0,
-            "vida": 0,
-            "blindaje": 0,
+            "oxigeno": 0, "vida": 0, "blindaje": 0,
             "total_income": total_income,
             "total_expenses": real_oxigeno + real_vida + real_blindaje
         }
-        
         if total_income > 0:
             dist_result["oxigeno"] = round((real_oxigeno / total_income) * 100)
             dist_result["vida"] = round((real_vida / total_income) * 100)
@@ -152,42 +200,140 @@ class DashboardService:
             "household_status": household_status.value,
             "status_message": status_msg,
             "upcoming_items": upcoming_items, 
-            "spending_zone": {
-                "status": spending_status.value,
-                "label": spending_label
-            },
-            "month_overview": self._compute_month_overview(household_id, now, months_ahead=3),
+            "spending_zone": { "status": spending_status.value, "label": spending_label },
+            "month_overview": month_overview,
             "distribution_real": dist_result
         }
         _CACHE["ts"] = now
         _CACHE["data"] = result
         return result
 
-    def _compute_month_overview(self, household_id: str, now: datetime, months_ahead: int = 3) -> Dict[str, Any]:
+    def _compute_month_overview_memory(self, incomes, commitments, events, household_id, now, months_ahead=3):
         month_start = datetime(now.year, now.month, 1)
 
-        def parse_date(value) -> date | None:
-            if not value:
-                return None
-            if hasattr(value, "date"):
-                try:
-                    return value.date()
-                except Exception:
-                    pass
-            try:
-                return datetime.fromisoformat(str(value)).date()
-            except Exception:
-                return None
+        def parse_date(value):
+            if not value: return None
+            if hasattr(value, "date"): return value.date()
+            try: return datetime.fromisoformat(str(value)).date()
+            except: return None
+        
+        # Variable Incomes Logic
+        var_by_name_month = {}
+        var_min_by_name = {}
+        for data in incomes:
+            if not data.get("is_variable", False): continue
+            name = (data.get("name") or "Sin nombre").strip()
+            min_amount = float(data.get("min_amount") or data.get("amount") or 0)
+            var_min_by_name[name] = max(var_min_by_name.get(name, 0), min_amount)
+            
+            month_val = data.get("month")
+            if not month_val:
+                 nd = parse_date(data.get("next_date"))
+                 if nd: month_val = nd.strftime("%Y-%m")
+            if month_val:
+                var_by_name_month.setdefault(name, {})
+                var_by_name_month[name][month_val] = var_by_name_month[name].get(month_val, 0) + float(data.get("amount", 0))
+
+        def month_key(dt): return dt.strftime("%Y-%m")
+        
+        def projected_variable_total(target_month_key):
+            total = 0.0
+            for name, min_amt in var_min_by_name.items():
+                 if var_by_name_month.get(name, {}).get(target_month_key) is not None: continue
+                 total += min_amt
+            return total
 
         incomes_total = 0.0
         commitments_total = 0.0
         events_mandatory = 0.0
         events_optional = 0.0
-        projections = []
+        
+        # Current month totals
+        for d in incomes:
+            amt = float(d.get("amount") or 0)
+            freq = d.get("frequency", "monthly")
+            nd = parse_date(d.get("next_date"))
+            if freq == "monthly": incomes_total += amt
+            elif freq == "weekly": incomes_total += amt * 4
+            elif freq == "biweekly": incomes_total += amt * 2
+            elif freq in ["one_time", "yearly"] and nd and month_start.date() <= nd < (month_start+timedelta(days=31)).date():
+                incomes_total += amt
+        incomes_total += projected_variable_total(month_key(month_start))
 
-        # Preload collections
-        incomes_docs = self.db.collection("households").document(household_id)\
-            .collection("incomes").limit(200).stream()
+        for d in commitments:
+            amt = float(d.get("amount") or 0)
+            freq = d.get("frequency", "monthly")
+            nd = parse_date(d.get("next_date"))
+            if freq == "monthly": commitments_total += amt
+            elif freq == "weekly": commitments_total += amt * 4
+            elif freq == "biweekly": commitments_total += amt * 2
+            elif freq in ["one_time", "yearly"] and nd and month_start.date() <= nd < (month_start+timedelta(days=31)).date():
+                commitments_total += amt
+
+        for d in events:
+             amt = float(d.get("amount_estimate") or 0)
+             ed = parse_date(d.get("date"))
+             if ed and month_start.date() <= ed < (month_start+timedelta(days=31)).date():
+                 if d.get("is_mandatory"): events_mandatory += amt
+                 else: events_optional += amt
+
+        projected_balance = incomes_total - commitments_total - events_mandatory
+        optional_budget = max(projected_balance, 0)
+
+        projections = []
+        for i in range(months_ahead + 1):
+             m_start = datetime(now.year, now.month, 1) + timedelta(days=31 * i)
+             m_end = m_start + timedelta(days=31)
+             def in_month(d): return d and m_start.date() <= d < m_end.date()
+             
+             inc = projected_variable_total(month_key(m_start))
+             for d in incomes:
+                 amt = float(d.get("amount") or 0)
+                 # simplified freq logic for projection
+                 freq = d.get("frequency", "monthly")
+                 nd = parse_date(d.get("next_date"))
+                 if freq == "monthly": inc += amt
+                 elif freq == "weekly": inc += amt * 4
+                 elif freq == "biweekly": inc += amt * 2
+                 elif freq in ["one_time", "yearly"] and in_month(nd): inc += amt
+            
+             com = 0.0
+             for d in commitments:
+                 amt = float(d.get("amount") or 0)
+                 freq = d.get("frequency", "monthly")
+                 nd = parse_date(d.get("next_date"))
+                 if freq == "monthly": com += amt
+                 elif freq == "weekly": com += amt * 4
+                 elif freq == "biweekly": com += amt * 2
+                 elif freq in ["one_time", "yearly"] and in_month(nd): com += amt
+             
+             ev_m = 0.0; ev_o = 0.0
+             for d in events:
+                 amt = float(d.get("amount_estimate") or 0)
+                 ed = parse_date(d.get("date"))
+                 if in_month(ed):
+                     if d.get("is_mandatory"): ev_m += amt
+                     else: ev_o += amt
+            
+             projections.append({
+                 "month": m_start.strftime("%Y-%m"),
+                 "income_total": round(inc, 2),
+                 "commitments_total": round(com, 2),
+                 "events_mandatory_total": round(ev_m, 2),
+                 "events_optional_total": round(ev_o, 2),
+                 "projected_balance": round(inc - com - ev_m, 2),
+                 "optional_budget": round(max(inc - com - ev_m, 0), 2)
+             })
+
+        return {
+            "income_total": round(incomes_total, 2),
+            "commitments_total": round(commitments_total, 2),
+            "events_mandatory_total": round(events_mandatory, 2),
+            "events_optional_total": round(events_optional, 2),
+            "projected_balance": round(projected_balance, 2),
+            "optional_budget": round(optional_budget, 2),
+            "projections": projections
+        }
         incomes = [d.to_dict() for d in incomes_docs]
         var_by_name_month: Dict[str, Dict[str, float]] = {}
         var_min_by_name: Dict[str, float] = {}

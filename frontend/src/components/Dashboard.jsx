@@ -182,7 +182,7 @@ const Dashboard = () => {
             </div>
 
             <div ref={horizonRef}>
-                <Horizon />
+                <Horizon initialItems={upcoming_items} />
             </div>
 
             <div className="spending-card" style={{ marginTop: '16px' }} ref={projectRef}>

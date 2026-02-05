@@ -2,11 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { getHorizon } from '../../services/api';
 import catObserving from '../../assets/mascots/cat/cat_observing.webp';
 
-const Horizon = () => {
-    const [items, setItems] = useState([]);
-    const [loading, setLoading] = useState(true);
+const Horizon = ({ initialItems }) => {
+    const [items, setItems] = useState(initialItems || []);
+    const [loading, setLoading] = useState(!initialItems);
 
     useEffect(() => {
+        if (initialItems) {
+            setItems(initialItems);
+            setLoading(false);
+            return;
+        }
+
         const load = async () => {
             try {
                 const data = await getHorizon();
@@ -19,7 +25,7 @@ const Horizon = () => {
             }
         };
         load();
-    }, []);
+    }, [initialItems]);
 
     const formatDays = (dateStr) => {
         if (!dateStr) return '';
