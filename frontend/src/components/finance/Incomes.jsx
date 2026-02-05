@@ -29,6 +29,14 @@ const Incomes = () => {
         if (inc.frequency === 'one_time' || inc.frequency === 'yearly') return sum;
         return sum + amt;
     }, 0);
+
+    const oneTimeThisMonth = incomes.reduce((sum, inc) => {
+        if (inc.is_variable || inc.frequency !== 'one_time') return sum;
+        const created = inc.created_at ? inc.created_at.slice(0, 7) : '';
+        if (created === currentMonth) return sum + Number(inc.amount || 0);
+        return sum;
+    }, 0);
+
     const variableByMonth = incomes.reduce((acc, inc) => {
         if (!inc.is_variable) return acc;
         const m = inc.month || '';
@@ -58,6 +66,7 @@ const Incomes = () => {
         if (inc.frequency === 'weekly') acc[key] = (acc[key] || 0) + amt * 4;
         else if (inc.frequency === 'biweekly') acc[key] = (acc[key] || 0) + amt * 2;
         else if (inc.frequency === 'monthly') acc[key] = (acc[key] || 0) + amt;
+        else if (inc.frequency === 'one_time') acc[key] = (acc[key] || 0) + amt;
         else acc[key] = (acc[key] || 0);
         return acc;
     }, {});
@@ -392,8 +401,8 @@ const Incomes = () => {
                         <span style={{ fontWeight: '700', color: 'var(--status-green-main)' }}>${Math.round(Number(totalFixedMonthly || 0)).toLocaleString('es-CL')}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ color: 'var(--color-text-dim)' }}>Variables (mes actual)</span>
-                        <span style={{ fontWeight: '700', color: 'var(--status-yellow-main)' }}>${Math.round(Number(totalVariableThisMonth || 0)).toLocaleString('es-CL')}</span>
+                        <span style={{ color: 'var(--color-text-dim)' }}>Variables + Extras (mes actual)</span>
+                        <span style={{ fontWeight: '700', color: 'var(--status-yellow-main)' }}>${Math.round(Number(totalVariableThisMonth + oneTimeThisMonth || 0)).toLocaleString('es-CL')}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                         <span style={{ color: 'var(--color-text-dim)' }}>Promedio variable (3 meses)</span>
