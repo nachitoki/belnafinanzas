@@ -131,46 +131,65 @@ def update_commitment(
 
         action = payload.get("action")
         if action == "pay":
+            # Logic for paying an installment or the periodic cycle
+            # We record a transaction and advance the next_date
+            
+            # Use provided paid_amount for the transaction, or fallback to the commitment's default amount
+            transaction_amount = float(payload.get("paid_amount")) if payload.get("paid_amount") is not None else float(doc.to_dict().get("amount", 0))
+
             updates["last_paid_at"] = datetime.now().isoformat()
-            installments_total = int(data.get("installments_total") or 0)
-            installments_paid = int(data.get("installments_paid") or 0)
-            if installments_total > 0 and installments_paid < installments_total:
-                updates["installments_paid"] = installments_paid + 1
+            
+            # Recalculate next date
+            current_next = data.get("next_date")
+            if current_next:
+                 try:
+                    curr_date = datetime.strptime(current_next, "%Y-%m-%d").date()
+                    freq = data.get("frequency", "monthly")
+                    
+                    if freq == "monthly":
+                         # Simple month increment
+                         # Handle month overflow
+                         new_month = curr_date.month + 1
+                         new_year = curr_date.year
+                         if new_month > 12:
+                             new_month = 1
+                             new_year += 1
+                         new_date = curr_date.replace(year=new_year, month=new_month)
+                         updates["next_date"] = new_date.isoformat()
+                    elif freq == "weekly":
+                         updates["next_date"] = (curr_date + timedelta(days=7)).isoformat()
+                    elif freq == "biweekly":
+                         updates["next_date"] = (curr_date + timedelta(days=14)).isoformat()
+                    elif freq == "yearly":
+                         updates["next_date"] = curr_date.replace(year=curr_date.year + 1).isoformat()
+                 except Exception:
+                     pass
+            
+            # If it has installments, increment paid count
+            if data.get("installments_total", 0) > 0:
+                paid = data.get("installments_paid", 0) + 1
+                updates["installments_paid"] = paid
+                if paid >= data.get("installments_total"):
+                     updates["status"] = "completed"
 
-            # Create Transaction Record
+            # Create Transaction
             try:
-                # 1. Get default account
-                accounts = db.collection("households").document(household_id).collection("accounts")\
-                    .where("is_active", "==", True).limit(1).stream()
-                account_id = next((a.id for a in accounts), None)
-                
-                if account_id:
-                    # 2. Get default category (Housing or Utilities for structural, or generic expense)
-                    # For simplicity, we search for a generic 'Gastos' or 'Compromisos' or first expense cat
-                    categories_ref = db.collection("households").document(household_id).collection("categories")
-                    cat_query = categories_ref.where("kind", "==", "expense").limit(1).stream()
-                    category_id = next((c.id for c in cat_query), "default_expense")
-
-                    # 3. Create Transaction
-                    amount = float(data.get("amount") or 0)
-                    transaction_data = {
-                        "occurred_on": datetime.now(),
-                        "amount": -abs(amount), # Expense is negative
-                        "description": f"Pago: {data.get('name')}",
-                        "category_id": category_id,
-                        "account_id": account_id,
-                        "status": "posted",
-                        "source": "commitment",
-                        "source_id": commitment_id,
-                        "created_at": datetime.now()
-                    }
-                    db.collection("households").document(household_id).collection("transactions").add(transaction_data)
+                transaction_data = {
+                    "occurred_on": datetime.now(), 
+                    "amount": -abs(transaction_amount), # Use the variable amount determined above
+                    "description": f"Pago de {data.get('name')}",
+                    "category_id": data.get("flow_category") or "compromisos",
+                    "account_id": "default", # MVP
+                    "status": "posted",
+                    "source": "commitment",
+                    "commitment_id": commitment_id,
+                    "created_at": datetime.now()
+                }
+                db.collection("households").document(household_id).collection("transactions").add(transaction_data)
             except Exception as e:
                 print(f"Error creating transaction for commitment: {e}")
                 # Don't fail the update if transaction creation fails, but log it
 
-            frequency = data.get("frequency", "monthly")
-            next_date = _parse_date(data.get("next_date")) or datetime.now().date()
             if frequency == "weekly":
                 updates["next_date"] = (next_date + timedelta(days=7)).isoformat()
             elif frequency == "biweekly":

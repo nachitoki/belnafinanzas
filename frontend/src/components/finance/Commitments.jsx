@@ -102,21 +102,28 @@ const Commitments = () => {
         }
     };
 
-    const handlePay = (item) => {
-        const confirm = window.confirm(`Marcar "${item.name}" como pagado por $${Number(item.amount).toLocaleString('es-CL')}?`);
-        if (!confirm) return;
+    const confirmPay = (item) => {
+        if (!payAmount) return;
         setActionSavingId(item.id);
-        updateCommitment(item.id, { action: 'pay' })
+        updateCommitment(item.id, { action: 'pay', paid_amount: payAmount })
             .then(() => {
-                alert(`¡Pagado! Se ha registrado el gasto de "${item.name}" en tu flujo.`);
+                // alert(`¡Pagado! Se ha registrado el gasto de "${item.name}" en tu flujo.`);
                 loadCommitments();
             })
-            .catch((e) => {
-                console.error('Error paying commitment', e);
-                const detail = e.response?.data?.detail || e.message || 'Error desconocido';
-                alert('No se pudo marcar como pagado: ' + detail);
+            .catch(err => {
+                console.error(err);
+                alert('Error al pagar');
             })
-            .finally(() => setActionSavingId(null));
+            .finally(() => {
+                setActionSavingId(null);
+                setActionPayingId(null);
+            });
+    };
+
+    const handlePay = (item) => {
+        // Deprecated in favor of inline flow, keeping if needed for direct calls
+        setActionPayingId(item.id);
+        setPayAmount(item.amount);
     };
 
     const handlePostpone = (item, value = null) => {
@@ -434,18 +441,50 @@ const Commitments = () => {
                                                         >
                                                             Postergar
                                                         </button>
-                                                        <button
-                                                            onClick={() => handlePay(c)}
-                                                            disabled={actionSavingId === c.id || isPaidThisMonth}
-                                                            style={{
-                                                                fontSize: '0.75rem', border: 'none',
-                                                                background: (actionSavingId === c.id || isPaidThisMonth) ? '#ddd' : 'var(--status-green-main)',
-                                                                color: (isPaidThisMonth) ? '#666' : 'white',
-                                                                borderRadius: '4px', padding: '4px 10px', fontWeight: '600'
-                                                            }}
-                                                        >
-                                                            {actionSavingId === c.id ? '...' : isPaidThisMonth ? 'Listo' : 'Pagar'}
-                                                        </button>
+
+                                                        {actionPayingId === c.id ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    value={payAmount}
+                                                                    onChange={(e) => setPayAmount(e.target.value)}
+                                                                    style={{ width: '80px', padding: '2px 4px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid #2E7D32' }}
+                                                                    autoFocus
+                                                                />
+                                                                <button
+                                                                    onClick={() => confirmPay(c)}
+                                                                    disabled={actionSavingId === c.id}
+                                                                    style={{
+                                                                        fontSize: '0.7rem', background: '#2E7D32', color: 'white',
+                                                                        border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {actionSavingId === c.id ? '...' : 'OK'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => { setActionPayingId(null); setPayAmount(''); }}
+                                                                    style={{
+                                                                        fontSize: '0.7rem', background: '#ddd', color: '#666',
+                                                                        border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    X
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => { setActionPayingId(c.id); setPayAmount(c.amount); }}
+                                                                disabled={actionSavingId === c.id || isPaidThisMonth}
+                                                                style={{
+                                                                    fontSize: '0.75rem', border: 'none',
+                                                                    background: (actionSavingId === c.id || isPaidThisMonth) ? '#ddd' : 'var(--status-green-main)',
+                                                                    color: (isPaidThisMonth) ? '#666' : 'white',
+                                                                    borderRadius: '4px', padding: '4px 10px', fontWeight: '600'
+                                                                }}
+                                                            >
+                                                                {actionSavingId === c.id ? '...' : isPaidThisMonth ? 'Listo' : 'Pagar'}
+                                                            </button>
+                                                        )}
                                                     </>
                                                 );
                                             })()}
