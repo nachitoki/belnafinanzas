@@ -180,7 +180,7 @@ const Horizon = ({ initialItems }) => {
                                         <div key={`${item.type}-${idx}`} className={`upcoming-item ${item.severity === 'high' ? 'red' : 'yellow'}`}>
                                             <div className="item-icon-circle">{item.type === 'commitment' ? 'C' : 'E'}</div>
                                             <div style={{ flex: 1 }}>
-                                                <div style={{ fontWeight: '700' }}>{item.label}</div>
+                                                <div style={{ fontWeight: '700' }}>{item.label || item.name || 'Sin nombre'}</div>
                                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
                                                     <span style={{
                                                         ...chipStyle(item.severity === 'high' ? 'danger' : 'warn'),

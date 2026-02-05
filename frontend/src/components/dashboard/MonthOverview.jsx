@@ -235,39 +235,19 @@ const MonthOverview = ({ data, distributionReal, projectEntry }) => {
                         />
                     ))}
                 </div>
-                <div style={{ marginTop: '6px', fontSize: '0.85rem' }}>{pulseMessage}</div>
-            </div>
-
-            <div style={{ marginTop: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--color-text-dim)' }}>Ingresos</span>
-                    <span style={{ fontWeight: '700', color: 'var(--status-green-main)' }}></span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--color-text-dim)' }}>Compromisos</span>
-                    <span style={{ fontWeight: '700', color: 'var(--status-red-main)' }}></span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--color-text-dim)' }}>Eventos obligatorios</span>
-                    <span style={{ fontWeight: '700', color: 'var(--status-red-main)' }}></span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <span style={{ color: 'var(--color-text-dim)' }}>Eventos opcionales</span>
-                    <span style={{ fontWeight: '700', color: 'var(--status-yellow-main)' }}></span>
-                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-light)', paddingTop: '10px' }}>
                     <span style={{ fontWeight: '700' }}>Saldo proyectado</span>
-                    <span style={{ fontWeight: '800', color: projectedBalance >= 0 ? 'var(--status-green-main)' : 'var(--status-red-main)' }}></span>
+                    <span style={{ fontWeight: '800', color: projectedBalance >= 0 ? 'var(--status-green-main)' : 'var(--status-red-main)' }}>{fmt(projectedBalance)}</span>
                 </div>
                 {stabilizationBuffer > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
                         <span style={{ color: 'var(--color-text-dim)' }}>Fondo de estabilización (invisible)</span>
-                        <span style={{ fontWeight: '700', color: 'var(--color-text-dim)' }}></span>
+                        <span style={{ fontWeight: '700', color: 'var(--color-text-dim)' }}>{fmt(stabilizationBuffer)}</span>
                     </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
                     <span style={{ color: 'var(--color-text-dim)' }}>Disponible para opcionales</span>
-                    <span style={{ fontWeight: '700', color: 'var(--status-yellow-main)' }}></span>
+                    <span style={{ fontWeight: '700', color: 'var(--status-yellow-main)' }}>{fmt(availableOptional)}</span>
                 </div>
             </div>
 
@@ -278,7 +258,7 @@ const MonthOverview = ({ data, distributionReal, projectEntry }) => {
                         <div key={p.month} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                             <span style={{ color: 'var(--color-text-dim)' }}>{p.month}</span>
                             <span style={{ fontWeight: '700', color: p.projected_balance >= 0 ? 'var(--status-green-main)' : 'var(--status-red-main)' }}>
-
+                                {fmt(p.projected_balance)}
                             </span>
                         </div>
                     ))}
