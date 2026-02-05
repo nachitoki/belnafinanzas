@@ -317,69 +317,69 @@ const Incomes = () => {
 
             {activeTab === 'distribucion' && (
                 <>
-                <div className="spending-card" style={{ marginTop: '10px' }}>
-                    <div className="section-title">Distribución Real (Mes Actual)</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '10px' }}>
-                        Oxígeno - Vida - Blindaje (meta vs real)
-                    </div>
-                    {[
-                        { label: 'Oxígeno', meta: distributionMeta.oxigeno, real: distData.oxigeno, desc: 'Gastos fijos indispensables (Vivienda, Servicios, Supermercado)' },
-                        { label: 'Vida', meta: distributionMeta.vida, real: distData.vida, desc: 'Estilo de vida y disfrute (Salidas, Hobbies, Gustos)' },
-                        { label: 'Blindaje', meta: distributionMeta.blindaje, real: distData.blindaje, desc: 'Seguridad financiera (Ahorro, Inversiones, Pago Deuda)' }
-                    ].map((g) => {
-                        const delta = g.real - g.meta;
-                        // For Oxigeno/Vida, being OVER meta is bad (Red). Being UNDER is good (Green).
-                        // For Blindaje (Savings), being OVER meta is good (Green). Being UNDER is bad (Red).
-                        const isBlindaje = g.label === 'Blindaje';
+                    <div className="spending-card" style={{ marginTop: '10px' }}>
+                        <div className="section-title">Distribución Real (Mes Actual)</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '10px' }}>
+                            Oxígeno - Vida - Blindaje (meta vs real)
+                        </div>
+                        {[
+                            { label: 'Oxígeno', meta: distributionMeta.oxigeno, real: distData.oxigeno, desc: 'Gastos fijos indispensables (Vivienda, Servicios, Supermercado)' },
+                            { label: 'Vida', meta: distributionMeta.vida, real: distData.vida, desc: 'Estilo de vida y disfrute (Salidas, Hobbies, Gustos)' },
+                            { label: 'Blindaje', meta: distributionMeta.blindaje, real: distData.blindaje, desc: 'Seguridad financiera (Ahorro, Inversiones, Pago Deuda)' }
+                        ].map((g) => {
+                            const delta = g.real - g.meta;
+                            // For Oxigeno/Vida, being OVER meta is bad (Red). Being UNDER is good (Green).
+                            // For Blindaje (Savings), being OVER meta is good (Green). Being UNDER is bad (Red).
+                            const isBlindaje = g.label === 'Blindaje';
 
-                        let tone;
-                        if (isBlindaje) {
-                            tone = delta >= 0 ? 'var(--status-green-main)' : delta > -5 ? 'var(--status-yellow-main)' : 'var(--status-red-main)';
-                        } else {
-                            tone = delta > 5 ? 'var(--status-red-main)' : delta > 0 ? 'var(--status-yellow-main)' : 'var(--status-green-main)';
-                        }
+                            let tone;
+                            if (isBlindaje) {
+                                tone = delta >= 0 ? 'var(--status-green-main)' : delta > -5 ? 'var(--status-yellow-main)' : 'var(--status-red-main)';
+                            } else {
+                                tone = delta > 5 ? 'var(--status-red-main)' : delta > 0 ? 'var(--status-yellow-main)' : 'var(--status-green-main)';
+                            }
 
-                        return (
-                            <div key={g.label} style={{ marginBottom: '16px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '4px' }}>
-                                    <div>
-                                        <div style={{ fontWeight: '700', fontSize: '1rem' }}>{g.label}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{g.desc}</div>
+                            return (
+                                <div key={g.label} style={{ marginBottom: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '4px' }}>
+                                        <div>
+                                            <div style={{ fontWeight: '700', fontSize: '1rem' }}>{g.label}</div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>{g.desc}</div>
+                                        </div>
+                                        <span style={{ color: tone, fontWeight: '600', fontSize: '0.9rem' }}>{g.real}% / {g.meta}%</span>
                                     </div>
-                                    <span style={{ color: tone, fontWeight: '600', fontSize: '0.9rem' }}>{g.real}% / {g.meta}%</span>
+                                    <div style={{ height: '10px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
+                                        <div style={{ width: `${Math.min(g.real, 100)}%`, height: '100%', background: tone }} />
+                                    </div>
+                                    <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                        {delta > 0 ? (isBlindaje ? `Superando meta por ${delta}%` : `Sobre meta por ${delta}%`)
+                                            : delta < 0 ? (isBlindaje ? `Bajo meta por ${Math.abs(delta)}%` : `Ahorro de ${Math.abs(delta)}% vs meta`)
+                                                : 'En meta'}
+                                    </div>
                                 </div>
-                                <div style={{ height: '10px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
-                                    <div style={{ width: `${Math.min(g.real, 100)}%`, height: '100%', background: tone }} />
+                            );
+                        })}
+                        <div style={{ marginTop: '16px', padding: '10px', background: '#f8f9fa', borderRadius: '8px', fontSize: '0.8rem' }}>
+                            <div><strong>Total Ingresos:</strong> ${Math.round(distData.total_income || 0).toLocaleString('es-CL')}</div>
+                            <div><strong>Total Gastos (categorizados):</strong> ${Math.round(distData.total_expenses || 0).toLocaleString('es-CL')}</div>
+                            {projectImpact.count > 0 && (
+                                <div style={{ marginTop: '6px' }}>
+                                    <strong>Proyectos activos:</strong> ${Math.round(projectImpact.total || 0).toLocaleString('es-CL')} / mes ({projectImpact.count})
                                 </div>
-                                <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                    {delta > 0 ? (isBlindaje ? `Superando meta por ${delta}%` : `Sobre meta por ${delta}%`)
-                                        : delta < 0 ? (isBlindaje ? `Bajo meta por ${Math.abs(delta)}%` : `Ahorro de ${Math.abs(delta)}% vs meta`)
-                                            : 'En meta'}
-                                </div>
-                            </div>
-                        );
-                    })}
-                    <div style={{ marginTop: '16px', padding: '10px', background: '#f8f9fa', borderRadius: '8px', fontSize: '0.8rem' }}>
-                        <div><strong>Total Ingresos:</strong> ${Math.round(distData.total_income || 0).toLocaleString('es-CL')}</div>
-                        <div><strong>Total Gastos (categorizados):</strong> ${Math.round(distData.total_expenses || 0).toLocaleString('es-CL')}</div>
-                        {projectImpact.count > 0 && (
-                            <div style={{ marginTop: '6px' }}>
-                                <strong>Proyectos activos:</strong> ${Math.round(projectImpact.total || 0).toLocaleString('es-CL')} / mes ({projectImpact.count})
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
-                </div>
-                <div className="spending-card" style={{ marginTop: '12px' }}>
-                    <div className="section-title">Ahorro e inversión básica</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '6px' }}>
-                        Recomendación breve basada en tu flujo actual.
+                    <div className="spending-card" style={{ marginTop: '12px' }}>
+                        <div className="section-title">Ahorro e inversión básica</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '6px' }}>
+                            Recomendación breve basada en tu flujo actual.
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
+                            {savingsLoading
+                                ? 'IA: generando recomendación...'
+                                : (savingsMessage ? `IA: ${savingsMessage}` : 'IA: mensaje no disponible.')}
+                        </div>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
-                        {savingsLoading
-                            ? 'IA: generando recomendación...'
-                            : (savingsMessage ? `IA: ${savingsMessage}` : 'IA: mensaje no disponible.')}
-                    </div>
-                </div>
                 </>
             )}
 
@@ -432,6 +432,89 @@ const Incomes = () => {
                         ))
                     )}
                 </div>
+            )}
+
+            {activeTab !== 'distribucion' && (
+                <>
+                    <div className="spending-card" style={{ marginTop: '10px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '10px' }}>AGREGAR INGRESO</div>
+                        <input
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Nombre (Sueldo, Bono, Venta, etc.)"
+                            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', marginBottom: '8px' }}
+                        />
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={isVariable}
+                                onChange={(e) => setIsVariable(e.target.checked)}
+                            />
+                            <span>¿Es un ingreso variable (ej. venta, bono)?</span>
+                        </label>
+
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                            <input
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                placeholder="Monto"
+                                inputMode="decimal"
+                                style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd', minWidth: '0' }}
+                            />
+                            {!isVariable && (
+                                <select
+                                    value={frequency}
+                                    onChange={(e) => setFrequency(e.target.value)}
+                                    style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd', minWidth: '0' }}
+                                >
+                                    <option value="monthly">Mensual</option>
+                                    <option value="weekly">Semanal</option>
+                                    <option value="biweekly">Quincenal</option>
+                                    <option value="yearly">Anual</option>
+                                    <option value="one_time">Unico</option>
+                                </select>
+                            )}
+                            {isVariable && (
+                                <input
+                                    type="month"
+                                    value={month}
+                                    onChange={(e) => setMonth(e.target.value)}
+                                    placeholder="Mes"
+                                    style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd', minWidth: '0' }}
+                                />
+                            )}
+                        </div>
+                        {isVariable && (
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                <input
+                                    value={minAmount}
+                                    onChange={(e) => setMinAmount(e.target.value)}
+                                    placeholder="Mínimo asegurado (opcional)"
+                                    inputMode="decimal"
+                                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', minWidth: '0' }}
+                                />
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                background: saving ? '#9AE6B4' : 'var(--status-green-main)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                opacity: saving ? 0.8 : 1
+                            }}
+                        >
+                            {saving ? 'Guardando...' : 'Guardar Ingreso'}
+                        </button>
+                    </div>
+                </>
             )}
 
             {activeTab !== 'distribucion' && (

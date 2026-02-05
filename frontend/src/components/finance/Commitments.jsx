@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCommitments, createCommitment, updateCommitment } from '../../services/api';
+import { getCommitments, createCommitment, updateCommitment, deleteCommitment } from '../../services/api';
 import PillTabs from '../layout/PillTabs';
 
 const Commitments = () => {
@@ -122,6 +122,17 @@ const Commitments = () => {
                 alert('No se pudo postergar: ' + detail);
             })
             .finally(() => setActionSavingId(null));
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('¿Eliminar este compromiso?')) return;
+        try {
+            await deleteCommitment(id);
+            await loadCommitments();
+        } catch (e) {
+            console.error('Error deleting commitment', e);
+            alert('Error al eliminar');
+        }
     };
 
     return (
@@ -266,9 +277,9 @@ const Commitments = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                             <div>
                                 <div style={{ fontWeight: '700' }}>{c.name}</div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                        {c.frequency || 'mensual'} {c.flow_category ? `- ${flowLabel(c.flow_category)}` : ''} {c.next_date ? `- Proximo: ${c.next_date}` : ''}
-                                    </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                    {c.frequency || 'mensual'} {c.flow_category ? `- ${flowLabel(c.flow_category)}` : ''} {c.next_date ? `- Proximo: ${c.next_date}` : ''}
+                                </div>
                                 {(c.installments_total > 0) && (
                                     <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--status-blue-main)', marginTop: '2px' }}>
                                         Cuota {c.installments_paid + 1} de {c.installments_total}
@@ -278,6 +289,20 @@ const Commitments = () => {
                             <div style={{ fontWeight: '700', color: 'var(--status-red-main)' }}>
                                 ${Number(c.amount || 0).toLocaleString('es-CL')}
                             </div>
+                            <button
+                                onClick={() => handleDelete(c.id)}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    marginLeft: '10px',
+                                    opacity: 0.5
+                                }}
+                                title="Eliminar"
+                            >
+                                🗑️
+                            </button>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', borderTop: '1px solid #eee', paddingTop: '10px' }}>
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
