@@ -170,8 +170,22 @@ class DashboardService:
         upcoming_items.sort(key=lambda x: x.get("date", ""))
         upcoming_items = upcoming_items[:20]
 
-        # 5. Global Household Status
-        products_status_list = [] # still skipped for MVP speed
+        # 6. Real Distribution Result
+        month_overview = self._compute_month_overview_memory(
+            incomes, commitments, events, household_id, now, months_ahead=3
+        )
+        total_income = month_overview.get('income_total', 0)
+        
+        # Override Status if Deficit is significant (e.g. < -50k CLP)
+        projected_balance = month_overview.get('projected_balance', 0)
+        if projected_balance < -50000:
+            spending_status = Status.RED
+            spending_label = "Déficit Proyectado Crítico"
+            # Update signals to reflect this force override
+            # Actually, compute_household_status uses signals.spending, so updating spending_status here is enough BEFORE creating signals.
+        
+        # 5. Global Household Status (Moved down to capture the override)
+        products_status_list = [] 
         signals = HouseholdSignals(
             spending=spending_status,
             recurring=[], 
@@ -179,13 +193,10 @@ class DashboardService:
         )
         household_status = compute_household_status(signals)
         status_msg = household_message(household_status)
-
-        # 6. Real Distribution Result
-        month_overview = self._compute_month_overview_memory(
-            incomes, commitments, events, household_id, now, months_ahead=3
-        )
-        total_income = month_overview.get('income_total', 0)
         
+        if projected_balance < -50000:
+             status_msg = "Alerta: Se proyecta déficit este mes."
+
         dist_result = {
             "oxigeno": 0, "vida": 0, "blindaje": 0,
             "total_income": total_income,
