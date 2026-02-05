@@ -4,9 +4,9 @@ import './index.css'
 import App from './App.jsx'
 
 // Guard for builds where some code references `meta` instead of `import.meta`.
-// Keeps runtime from crashing in production bundles.
-// eslint-disable-next-line no-unused-vars
-var meta = import.meta;
+// Keep it on globalThis so any module can read it.
+// eslint-disable-next-line no-undef
+globalThis.meta = import.meta;
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
