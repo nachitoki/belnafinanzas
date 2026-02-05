@@ -184,6 +184,13 @@ export const updateCommitment = async (commitmentId, payload) => {
     return response.data;
 };
 
+export const deleteCommitment = async (commitmentId) => {
+    const response = await axios.delete(`${API_URL}/commitments/${commitmentId}`, {
+        timeout: REQUEST_TIMEOUT_MS,
+    });
+    return response.data;
+};
+
 export const getEvents = async () => {
     const response = await axios.get(`${API_URL}/events`, {
         timeout: REQUEST_TIMEOUT_MS,
