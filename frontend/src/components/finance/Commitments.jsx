@@ -307,133 +307,120 @@ const Commitments = () => {
 
             <h3 className="section-title" style={{ textAlign: 'center', marginTop: '20px' }}>COMPROMISOS REGISTRADOS</h3>
 
+            {/* Groups Rendering */}
             {loading ? (
                 <div className="loading-text">Cargando compromisos...</div>
             ) : commitments.length === 0 ? (
                 <div className="loading-text">Sin compromisos aun.</div>
             ) : (
-                commitments.map((c) => (
-                    <div key={c.id} className="spending-card" style={{ marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                            <div>
-                                <div style={{ fontWeight: '700' }}>{c.name}</div>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                    {c.frequency || 'mensual'} {c.flow_category ? `- ${flowLabel(c.flow_category)}` : ''} {c.next_date ? `- Proximo: ${c.next_date}` : ''}
+                (() => {
+                    // Grouping Logic
+                    const getGroup = (c) => {
+                        const name = (c.name || '').toLowerCase();
+                        if (name.includes('arriendo') || name.includes('dividendo') || name.includes('luz') || name.includes('agua') || name.includes('gas') || name.includes('internet') || name.includes('casa') || name.includes('nana')) return 'Hogar';
+                        if (name.includes('colegio') || name.includes('jardin') || name.includes('universidad') || name.includes('matricula')) return 'Educación';
+                        if (name.includes('auto') || name.includes('bencina') || name.includes('tag') || name.includes('seguro auto') || name.includes('permiso') || name.includes('patente')) return 'Transporte';
+                        if (name.includes('isapre') || name.includes('seguro vida') || name.includes('medico') || name.includes('farmacia') || name.includes('doctor')) return 'Salud';
+                        if (name.includes('credito') || name.includes('prestamo') || name.includes('visa') || name.includes('mastercard') || name.includes('banco') || name.includes('cuota')) return 'Deudas / Financiero';
+                        if (name.includes('super') || name.includes('jumbo') || name.includes('lider') || name.includes('pan') || name.includes('fruta') || name.includes('feria')) return 'Alimentación / Super';
+                        return 'Otros';
+                    };
+
+                    const groups = commitments.reduce((acc, c) => {
+                        const g = getGroup(c);
+                        acc[g] = acc[g] || [];
+                        acc[g].push(c);
+                        return acc;
+                    }, {});
+
+                    const groupOrder = ['Hogar', 'Alimentación / Super', 'Educación', 'Salud', 'Transporte', 'Deudas / Financiero', 'Otros'];
+
+                    return groupOrder.map(groupName => {
+                        const items = groups[groupName] || [];
+                        if (items.length === 0) return null;
+
+                        const totalGroup = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+
+                        return (
+                            <div key={groupName} style={{ marginBottom: '20px' }}>
+                                <div style={{
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                    background: 'var(--bg-card)', padding: '10px 14px', borderRadius: '12px',
+                                    border: '1px solid var(--border-light)', marginBottom: '8px'
+                                }}>
+                                    <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--color-text-main)' }}>{groupName}</h3>
+                                    <span style={{ fontWeight: '700', color: 'var(--color-text-dim)' }}>${totalGroup.toLocaleString('es-CL')}</span>
                                 </div>
-                                {(c.installments_total > 0) && (
-                                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--status-blue-main)', marginTop: '2px' }}>
-                                        Cuota {c.installments_paid + 1} de {c.installments_total}
+
+                                {items.map(c => (
+                                    <div key={c.id} className="spending-card" style={{ marginBottom: '8px', borderLeft: '4px solid #E2E8F0' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <div>
+                                                <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>{c.name}</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {c.frequency || 'mensual'} {c.next_date ? `· ${c.next_date}` : ''}
+                                                    {c.flow_category === 'provision' && (
+                                                        <span style={{
+                                                            fontSize: '0.65rem', background: '#FEF3C7', color: '#B45309',
+                                                            padding: '2px 6px', borderRadius: '4px', border: '1px solid #FCD34D',
+                                                            fontWeight: '600'
+                                                        }}>
+                                                            PROVISIÓN
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {(c.installments_total > 0) && (
+                                                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--status-blue-main)' }}>
+                                                        Cuota {c.installments_paid + 1}/{c.installments_total}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div style={{ fontWeight: '700', color: 'var(--status-red-main)' }}>
+                                                ${Number(c.amount || 0).toLocaleString('es-CL')}
+                                            </div>
+                                        </div>
+
+                                        {/* Actions Bar */}
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
+                                            <button
+                                                onClick={() => handleEditOpen(c)}
+                                                style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
+                                            >
+                                                ✏️
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(c.id)}
+                                                style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
+                                            >
+                                                🗑️
+                                            </button>
+
+                                            <div style={{ width: '1px', background: '#ddd', margin: '0 4px' }}></div>
+
+                                            <button
+                                                onClick={() => handlePostpone(c)}
+                                                style={{ fontSize: '0.7rem', border: '1px solid #ddd', background: 'white', borderRadius: '4px', padding: '2px 6px' }}
+                                            >
+                                                Postergar
+                                            </button>
+                                            <button
+                                                onClick={() => handlePay(c)}
+                                                disabled={actionSavingId === c.id}
+                                                style={{
+                                                    fontSize: '0.75rem', border: 'none',
+                                                    background: actionSavingId === c.id ? '#ddd' : 'var(--status-green-main)',
+                                                    color: 'white', borderRadius: '4px', padding: '4px 10px', fontWeight: '600'
+                                                }}
+                                            >
+                                                {actionSavingId === c.id ? '...' : 'Pagar'}
+                                            </button>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
-                            <div style={{ fontWeight: '700', color: 'var(--status-red-main)' }}>
-                                ${Number(c.amount || 0).toLocaleString('es-CL')}
-                            </div>
-                            <div style={{ display: 'flex' }}>
-                                <button
-                                    onClick={() => handleEditOpen(c)}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '1.2rem',
-                                        marginLeft: '10px',
-                                        opacity: 0.5
-                                    }}
-                                    title="Editar"
-                                >
-                                    {'\u270F\uFE0F'}
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(c.id)}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '1.2rem',
-                                        marginLeft: '4px',
-                                        opacity: 0.5
-                                    }}
-                                    title="Eliminar"
-                                >
-                                    🗑️
-                                </button>
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', borderTop: '1px solid #eee', paddingTop: '10px' }}>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                {[5, 10, 15, 30].map((d) => (
-                                    <button
-                                        key={`${c.id}-postpone-${d}`}
-                                        onClick={() => handlePostpone(c, String(d))}
-                                        type="button"
-                                        style={{
-                                            background: '#f8fafc',
-                                            border: '1px solid #e2e8f0',
-                                            borderRadius: '999px',
-                                            padding: '4px 10px',
-                                            fontSize: '0.75rem',
-                                            color: 'var(--color-text-dim)',
-                                            cursor: 'pointer',
-                                            touchAction: 'manipulation'
-                                        }}
-                                    >
-                                        +{d}d
-                                    </button>
                                 ))}
-                                <button
-                                    onClick={() => handlePostpone(c, 'next_month')}
-                                    type="button"
-                                    style={{
-                                        background: '#f8fafc',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '999px',
-                                        padding: '4px 10px',
-                                        fontSize: '0.75rem',
-                                        color: 'var(--color-text-dim)',
-                                        cursor: 'pointer',
-                                        touchAction: 'manipulation'
-                                    }}
-                                >
-                                    Próx. mes
-                                </button>
-                                <button
-                                    onClick={() => handlePostpone(c)}
-                                    type="button"
-                                    style={{
-                                        background: 'transparent',
-                                        border: '1px dashed #cbd5e0',
-                                        borderRadius: '999px',
-                                        padding: '4px 10px',
-                                        fontSize: '0.75rem',
-                                        color: 'var(--color-text-dim)',
-                                        cursor: 'pointer',
-                                        touchAction: 'manipulation'
-                                    }}
-                                >
-                                    Otro...
-                                </button>
                             </div>
-                            <button
-                                onClick={() => handlePay(c)}
-                                type="button"
-                                disabled={actionSavingId === c.id}
-                                style={{
-                                    background: 'var(--status-green-main)',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '6px 12px',
-                                    fontSize: '0.85rem',
-                                    color: 'white',
-                                    fontWeight: '600',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                {actionSavingId === c.id ? 'Guardando...' : 'Pagar compromiso'}
-                            </button>
-                        </div>
-                    </div>
-                ))
+                        );
+                    });
+                })()
             )}
 
             {/* EDIT MODAL */}
