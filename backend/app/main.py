@@ -20,11 +20,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware (adjust for production)
+# CORS middleware (MVP: allow all origins to avoid deployment blockers)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080", "http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176"],  # Add your frontend URLs
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
