@@ -113,6 +113,19 @@ class ReceiptProcessor:
             'updated_at': datetime.now()
         })
         
+        # LEARN PATTERN (Smart Features)
+        try:
+            self._learn_pattern(
+                household_id=household_id,
+                store_id=store_id,
+                store_name=store_name,
+                total=total,
+                occurred_on=occurred_on,
+                category_id=category_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to learn pattern: {e}")
+
         logger.info(f"Receipt {receipt_id} confirmed successfully")
         
         return {
@@ -349,3 +362,60 @@ class ReceiptProcessor:
             return datetime.combine(parsed_date, time.min)
         except Exception:
             return datetime.utcnow()
+
+    def _learn_pattern(
+        self,
+        household_id: str,
+        store_id: str,
+        store_name: str,
+        total: int,
+        occurred_on: datetime,
+        category_id: str
+    ):
+        """
+        Update expense pattern for future predictions/autocomplete
+        """
+        if not store_name: return
+
+        # Normalize ID for the pattern document (sanitize store name if no ID)
+        if store_id:
+            doc_id = store_id
+        else:
+            # Fallback for manual receipts without store_id yet
+            doc_id = "".join(c for c in store_name.lower() if c.isalnum())
+        
+        if not doc_id: return
+
+        pattern_ref = self.db.collection('households').document(household_id)\
+            .collection('expense_patterns').document(doc_id)
+        
+        doc = pattern_ref.get()
+        now = datetime.now()
+        
+        if doc.exists:
+            data = doc.to_dict()
+            count = data.get('count', 0) + 1
+            avg = ((data.get('avg_amount', 0) * (count - 1)) + total) / count
+            
+            updates = {
+                'store_name': store_name, # Update name in case it improved
+                'last_amount': total,
+                'avg_amount': int(avg),
+                'last_date': occurred_on,
+                'count': count,
+                'category_id': category_id or data.get('category_id'),
+                'updated_at': now
+            }
+            pattern_ref.update(updates)
+        else:
+            pattern_ref.set({
+                'store_name': store_name,
+                'store_id': store_id,
+                'last_amount': total,
+                'avg_amount': total,
+                'last_date': occurred_on,
+                'count': 1,
+                'category_id': category_id,
+                'created_at': now,
+                'updated_at': now
+            })

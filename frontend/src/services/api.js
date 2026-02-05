@@ -330,6 +330,17 @@ export const generateBitacoraPatterns = async () => {
     return response.data;
 };
 
+export const getExpensePatterns = async () => {
+    try {
+        const response = await axios.get(`${API_URL}/patterns`, {
+            timeout: REQUEST_TIMEOUT_MS
+        });
+        return response.data;
+    } catch (error) {
+        console.warn('Failed to fetch patterns', error);
+        return [];
+    }
+};
 export const simulateBitacoraIdea = async (payload) => {
     const response = await postWithFallback('/bitacora/simulate', payload || {}, {
         timeout: REQUEST_TIMEOUT_MS,

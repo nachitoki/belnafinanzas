@@ -499,3 +499,36 @@ def create_manual_receipt(
     except Exception as e:
         logger.error(f"Failed to create manual receipt: {e}")
         raise HTTPException(status_code=500, detail=f"Manual creation failed: {str(e)}")
+
+
+@router.get("/patterns", response_model=List[dict])
+def get_expense_patterns(
+    limit: int = 50,
+    user: dict = Depends(get_current_user),
+    db: Client = Depends(get_firestore)
+):
+    """
+    Get learned expense patterns for autocomplete/predictions.
+    Returns most frequent stores first.
+    """
+    household_id = user['household_id']
+    
+    patterns_ref = db.collection('households').document(household_id)\
+        .collection('expense_patterns')\
+        .order_by('count', direction='DESCENDING')\
+        .limit(limit)
+    
+    docs = patterns_ref.stream()
+    result = []
+    
+    for doc in docs:
+        data = doc.to_dict()
+        result.append({
+            'store_name': data.get('store_name'),
+            'avg_amount': data.get('avg_amount'),
+            'last_amount': data.get('last_amount'),
+            'category_id': data.get('category_id'),
+            'count': data.get('count', 1)
+        })
+        
+    return result

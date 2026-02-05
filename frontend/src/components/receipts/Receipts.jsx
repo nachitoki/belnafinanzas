@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { uploadReceipt, confirmReceipt, getStores, createManualReceipt } from '../../services/api';
+import { uploadReceipt, confirmReceipt, getStores, createManualReceipt, getExpensePatterns } from '../../services/api';
 import ReceiptHistory from './ReceiptHistory';
 import ShoppingList from '../shopping/ShoppingList';
 import PillTabs from '../layout/PillTabs';
@@ -20,6 +20,19 @@ const Receipts = () => {
     const [errorMsg, setErrorMsg] = useState('');
     const [confirming, setConfirming] = useState(false);
     const [stores, setStores] = useState([]);
+
+    // SMART PATTERNS & MANUAL ENTRY
+    const [patterns, setPatterns] = useState([]);
+    const [manualModalOpen, setManualModalOpen] = useState(false);
+    const [manualData, setManualData] = useState({ store: '', total: '', date: '', items: [] });
+    const [filteredPatterns, setFilteredPatterns] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
+    useEffect(() => {
+        getExpensePatterns().then(data => {
+            if (data) setPatterns(data);
+        });
+    }, []);
 
     const guessReceiptType = (value) => {
         const text = (value || '').toString().toLowerCase();
@@ -189,6 +202,65 @@ const Receipts = () => {
         setErrorMsg('');
     };
 
+    // MANUAL MODAL HANDLERS
+    const openManualModal = () => {
+        setManualData({ store: '', total: '', date: new Date().toISOString().split('T')[0], items: [] });
+        setManualModalOpen(true);
+    };
+
+    const handleManualStoreChange = (e) => {
+        const value = e.target.value;
+        setManualData({ ...manualData, store: value });
+
+        if (value.length > 1) {
+            const filtered = patterns.filter(p =>
+                p.store_name && p.store_name.toLowerCase().includes(value.toLowerCase())
+            );
+            setFilteredPatterns(filtered);
+            setShowSuggestions(true);
+        } else {
+            setShowSuggestions(false);
+        }
+    };
+
+    const selectPattern = (pattern) => {
+        setManualData({
+            ...manualData,
+            store: pattern.store_name,
+            total: pattern.avg_amount || pattern.last_amount || '',
+            // If we had categories in manualData, we would set it here too
+        });
+        setShowSuggestions(false);
+    };
+
+    const handleManualSubmit = async () => {
+        if (!manualData.store || !manualData.total) return;
+
+        setStatus('confirming');
+        setConfirming(true);
+        setManualModalOpen(false);
+
+        try {
+            await createManualReceipt({
+                store_name: manualData.store,
+                date: manualData.date || new Date().toISOString().split('T')[0],
+                total: parseNumber(manualData.total),
+                items: []
+            });
+            setStatus('success');
+            setTimeout(() => {
+                setStatus('idle');
+                setActiveTab('list'); // Go to list to see it? or stay? history better.
+            }, 1500);
+        } catch (e) {
+            console.error(e);
+            setErrorMsg('Error al crear gasto manual');
+            setStatus('error');
+        } finally {
+            setConfirming(false);
+        }
+    };
+
     // --- RENDERERS ---
 
     const renderIdle = () => (
@@ -219,7 +291,7 @@ const Receipts = () => {
 
             <button
                 style={{ marginTop: '20px', padding: '12px 24px', background: 'transparent', border: '1px solid var(--color-text-dim)', color: 'var(--color-text-dim)', borderRadius: '8px', width: '100%' }}
-                onClick={() => alert('Ingreso Manual: Proximamente')}
+                onClick={openManualModal}
             >
                 {'\u2328'} Ingreso Manual
             </button>
@@ -700,6 +772,90 @@ const Receipts = () => {
                 <ReceiptHistory />
             ) : (
                 <ShoppingList mode={activeTab === 'ahorro' ? 'ahorro' : 'list'} />
+            )}
+
+            {/* MANUAL ENTRY MODAL */}
+            {manualModalOpen && (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+                }}>
+                    <div style={{ background: 'white', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '360px' }}>
+                        <h3 style={{ marginTop: 0 }}>Gasto Manual</h3>
+
+                        <div style={{ marginBottom: '15px', position: 'relative' }}>
+                            <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Tienda / Concepto</label>
+                            <input
+                                value={manualData.store}
+                                onChange={handleManualStoreChange}
+                                onFocus={() => {
+                                    if (manualData.store.length > 1 && filteredPatterns.length > 0) setShowSuggestions(true);
+                                }}
+                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                placeholder="Ej. Panadería, Lider, Copec..."
+                                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+                            />
+                            {showSuggestions && filteredPatterns.length > 0 && (
+                                <div style={{
+                                    position: 'absolute', top: '100%', left: 0, right: 0,
+                                    background: 'white', border: '1px solid #ddd', borderRadius: '8px',
+                                    marginTop: '4px', maxHeight: '150px', overflowY: 'auto', zIndex: 10,
+                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                }}>
+                                    {filteredPatterns.map((p, idx) => (
+                                        <div
+                                            key={idx}
+                                            onClick={() => selectPattern(p)}
+                                            style={{ padding: '8px 12px', borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                                        >
+                                            <div style={{ fontWeight: '600' }}>{p.store_name}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#666' }}>
+                                                Sugerido: ${Math.round(p.avg_amount || 0).toLocaleString('es-CL')}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Monto</label>
+                                <input
+                                    type="number"
+                                    value={manualData.total}
+                                    onChange={(e) => setManualData({ ...manualData, total: e.target.value })}
+                                    placeholder="$"
+                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+                                />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Fecha</label>
+                                <input
+                                    type="date"
+                                    value={manualData.date}
+                                    onChange={(e) => setManualData({ ...manualData, date: e.target.value })}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                onClick={() => setManualModalOpen(false)}
+                                style={{ flex: 1, padding: '12px', background: '#f5f5f5', border: 'none', borderRadius: '8px' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleManualSubmit}
+                                style={{ flex: 1, padding: '12px', background: 'var(--status-green-main)', color: 'white', border: 'none', borderRadius: '8px' }}
+                            >
+                                Guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
