@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Gemini AI
     gemini_api_key: str
     gemini_model: str | None = None
+    gemini_fallback_model: str | None = None
 
     # Telegram
     telegram_bot_token: str

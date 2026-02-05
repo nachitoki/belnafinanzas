@@ -18,7 +18,11 @@ def get_extractor():
     """Get or initialize AI extractor"""
     global _extractor
     if _extractor is None:
-        _extractor = GeminiVisionExtractor(settings.gemini_api_key, settings.gemini_model)
+        _extractor = GeminiVisionExtractor(
+            settings.gemini_api_key,
+            settings.gemini_model,
+            settings.gemini_fallback_model,
+        )
     return _extractor
 
 

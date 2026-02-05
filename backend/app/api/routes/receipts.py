@@ -170,7 +170,11 @@ def upload_receipt(
         logger.info(f"Receipt created, starting AI extraction: {receipt_id}")
         
         # Process with AI extraction immediately
-        extractor = GeminiVisionExtractor(settings.gemini_api_key, settings.gemini_model)
+        extractor = GeminiVisionExtractor(
+            settings.gemini_api_key,
+            settings.gemini_model,
+            settings.gemini_fallback_model,
+        )
         extraction_result = extractor.extract(image_url)
         
         if extraction_result.success:

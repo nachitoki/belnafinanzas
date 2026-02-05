@@ -142,15 +142,31 @@ Remember:
 - Output JSON only"""
 
     # Fallback prompt when items are empty
-    EXTRACTION_PROMPT_FALLBACK = """Extract as many receipt items as possible.
+    EXTRACTION_PROMPT_FALLBACK = """You are doing a best-effort OCR extraction.
 Return ONLY valid JSON in the same schema as before.
-If items are still unclear, set items to [] and set is_blurry = true."""
+If any line looks like a product, include it as an item name even if qty/unit are unknown.
+If the receipt is readable but details are partial, still return items with null qty/unit.
+If nothing is legible, return items: [] and set is_blurry = true."""
 
-    def __init__(self, api_key: str, model_name: str | None = None):
+    EXTRACTION_PROMPT_ULTRA = """Best-effort OCR for receipts.
+Return ONLY valid JSON in the same schema.
+If you can read any product names, list them as items.
+Use null for unknown fields. Do not return an empty items list unless nothing is legible."""
+
+    def __init__(self, api_key: str, model_name: str | None = None, fallback_model_name: str | None = None):
         """Initialize Gemini Vision API"""
         genai.configure(api_key=api_key)
         model_to_use = model_name or "gemini-1.5-flash"
         self.model = genai.GenerativeModel(model_to_use)
+        self.model_name = model_to_use
+        self.fallback_model_name = fallback_model_name
+        self.fallback_model = None
+        if fallback_model_name and fallback_model_name != model_to_use:
+            try:
+                self.fallback_model = genai.GenerativeModel(fallback_model_name)
+                logger.info(f"GeminiVisionExtractor fallback model: {fallback_model_name}")
+            except Exception as e:
+                logger.warning(f"Failed to init fallback model {fallback_model_name}: {e}")
         logger.info(f"GeminiVisionExtractor initialized with model: {model_to_use}")
     
     def extract(self, image_url: str) -> ReceiptExtractionResult:
@@ -164,15 +180,18 @@ If items are still unclear, set items to [] and set is_blurry = true."""
             
             # Download image for processing
             import requests
-            response = requests.get(image_url)
+            response = requests.get(image_url, timeout=30)
             response.raise_for_status()
             image_bytes = response.content
+            mime_type = response.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+            if not mime_type.startswith("image/"):
+                mime_type = "image/jpeg"
             
             # Call Gemini Vision
             result = self.model.generate_content([
                 self.EXTRACTION_PROMPT,
                 {
-                    "mime_type": "image/jpeg",
+                    "mime_type": mime_type,
                     "data": image_bytes
                 }
             ])
@@ -193,10 +212,27 @@ If items are still unclear, set items to [] and set is_blurry = true."""
             # If extraction is empty, retry with fallback prompt
             if not data.get('items') and not data.get('total') and not data.get('store', {}).get('name'):
                 logger.info("Empty extraction. Retrying with fallback prompt.")
-                retry = self.model.generate_content([
+                retry_model = self.fallback_model or self.model
+                retry = retry_model.generate_content([
                     self.EXTRACTION_PROMPT_FALLBACK,
                     {
-                        "mime_type": "image/jpeg",
+                        "mime_type": mime_type,
+                        "data": image_bytes
+                    }
+                ])
+                retry_text = retry.text.strip()
+                retry_json = self._extract_json(retry_text)
+                retry_data = json.loads(retry_json)
+                self._validate_schema(retry_data)
+                data = retry_data
+
+            if not data.get('items'):
+                logger.info("Still empty after fallback. Retrying with ultra prompt.")
+                retry_model = self.fallback_model or self.model
+                retry = retry_model.generate_content([
+                    self.EXTRACTION_PROMPT_ULTRA,
+                    {
+                        "mime_type": mime_type,
                         "data": image_bytes
                     }
                 ])
