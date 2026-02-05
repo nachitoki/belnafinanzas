@@ -197,7 +197,7 @@ async def _handle_photo_receipt(photo, household_id, user_id, bucket, db, chat_i
     
     # 5. Trigger Extraction (Immediate for MVP feel)
     try:
-        extractor = GeminiVisionExtractor(settings.gemini_api_key)
+        extractor = GeminiVisionExtractor(settings.gemini_api_key, settings.gemini_model)
         result = extractor.extract(image_url)
         
         if result.success:

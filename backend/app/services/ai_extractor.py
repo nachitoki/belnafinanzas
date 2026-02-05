@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+﻿from abc import ABC, abstractmethod
 import google.generativeai as genai
 import json
 import logging
@@ -54,75 +54,57 @@ class GeminiVisionExtractor(ReceiptExtractor):
     """Gemini Vision API implementation of receipt extraction"""
     
     # Extraction prompt v3 - optimized for Chilean receipts with store and quantity/unit detection
-    EXTRACTION_PROMPT = """You are an OCR + structured information extraction system specialized in **Chilean retail receipts**.
+    # Extraction prompt v4 - optimized for Chilean receipts with store and quantity/unit detection
+    EXTRACTION_PROMPT = """You are an OCR + structured information extraction system specialized in Chilean retail receipts.
 Your task is to extract reliable, structured data from a receipt image.
 
-⚠️ **STRICT RULES**
-- Output **ONLY valid JSON**
-- Do **NOT** include explanations, comments, markdown, or extra text
-- If a value cannot be determined with confidence, use **null**
-- **Never invent data**
+STRICT RULES
+- Output ONLY valid JSON
+- Do NOT include explanations, comments, markdown, or extra text
+- If a value cannot be determined with confidence, use null
+- Never invent data
 
----
-
-## 🏪 STORE DETECTION (CRITICAL)
-
+STORE DETECTION (CRITICAL)
 Determine the store using this priority:
-1. Exact store name explicitly written at the **top/header** of the receipt
-2. Business name (razón social) commonly associated with a known Chilean store
-3. RUT + address **only if the store can be inferred with high confidence**
+1) Exact store name explicitly written at the top/header of the receipt
+2) Business name (razon social) commonly associated with a known Chilean store
+3) RUT + address only if the store can be inferred with high confidence
 
 Known Chilean stores to recognize:
-- Unimarc, Líder, Jumbo, Santa Isabel, Tottus, Acuenta
+- Unimarc, Lider, Jumbo, Santa Isabel, Tottus, Acuenta
 - Falabella, Ripley, Paris, La Polar
 - Sodimac, Easy, Construmart
 - Farmacias Ahumada, Cruz Verde, Salcobrand
 - Copec, Shell, Petrobras
 - Pronto Copec, Ok Market, Oxxo
-- McDonald's, Starbucks, Juan Valdez
+- McDonalds, Starbucks, Juan Valdez
 
-If the store is inferred (not explicitly written), mark it as `"method": "inferred"` and reduce confidence.
+If the store is inferred (not explicitly written), mark it as method: "inferred" and reduce confidence.
 
----
-
-## 📅 DATE & 💰 TOTAL
-
+DATE & TOTAL
 - Extract the transaction date (YYYY-MM-DD).
-- Extract the **final total paid** in CLP integer (not subtotal, not tax).
+- Extract the final total paid in CLP integer (not subtotal, not tax).
 
----
-
-## 🛒 ITEMS (VERY IMPORTANT)
-
+ITEMS (VERY IMPORTANT)
 For each purchased item:
-- Extract the **product name exactly as written**
-- Detect **quantity and unit** ONLY if clearly stated or mathematically evident
-- Allowed units:
-    - `"kg"` (kilograms)
-    - `"g"` (grams)
-    - `"l"` (liters)
-    - `"ml"` (milliliters)
-    - `"unit"` (individual items)
+- Extract the product name exactly as written
+- Detect quantity and unit ONLY if clearly stated or mathematically evident
+- Allowed units: "kg", "g", "l", "ml", "unit"
 
-### Quantity rules:
-- If the receipt shows weight-based pricing (e.g. fruits, vegetables, meat), extract the weight as `qty` and unit `"kg"` or `"g"`.
-- If multiple units are bought (e.g. "2 x yogurt"), extract qty = 2, unit = `"unit"`.
-- If quantity or unit is ambiguous, set both to **null**.
+Quantity rules:
+- If the receipt shows weight-based pricing (fruits, vegetables, meat), extract the weight as qty and unit "kg" or "g".
+- If multiple units are bought (e.g. "2 x yogurt"), extract qty = 2, unit = "unit".
+- If quantity or unit is ambiguous, set both to null.
 
-⚠️ Prefer **null over guessing**.
+Prefer null over guessing.
 
----
-
-## 🌫️ BLUR DETECTION
+BLUR DETECTION
 If the image is too blurry to read item details reliably:
 - Set "is_blurry": true
 - Extract what is legible (e.g. Total, Date)
 - If nothing is legible, return items: [] and very low confidence.
 
----
-
-## 🧾 OUTPUT FORMAT (STRICT JSON)
-
+OUTPUT FORMAT (STRICT JSON)
 {
   "store": {
     "name": "string | null",
@@ -143,33 +125,33 @@ If the image is too blurry to read item details reliably:
   "confidence_overall": number
 }
 
----
-
-## 📊 CONFIDENCE SCALE
-
+CONFIDENCE SCALE
 - 1.0 = very high certainty
-- 0.7–0.9 = high confidence
-- 0.4–0.6 = medium confidence
+- 0.7-0.9 = high confidence
+- 0.4-0.6 = medium confidence
 - < 0.4 = low confidence
 
 If store name is not visible or inferable with high confidence:
-- "name": null
-- "method": "unknown"
-- "confidence": <0.4
-
----
+- name: null
+- method: "unknown"
+- confidence: < 0.4
 
 Remember:
 - One receipt = one extraction
-- Prefer **accuracy and nulls** over completeness
+- Prefer accuracy and nulls over completeness
 - Output JSON only"""
 
-    
-    def __init__(self, api_key: str):
+    # Fallback prompt when items are empty
+    EXTRACTION_PROMPT_FALLBACK = """Extract as many receipt items as possible.
+Return ONLY valid JSON in the same schema as before.
+If items are still unclear, set items to [] and set is_blurry = true."""
+
+    def __init__(self, api_key: str, model_name: str | None = None):
         """Initialize Gemini Vision API"""
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        logger.info("GeminiVisionExtractor initialized")
+        model_to_use = model_name or "gemini-1.5-flash"
+        self.model = genai.GenerativeModel(model_to_use)
+        logger.info(f"GeminiVisionExtractor initialized with model: {model_to_use}")
     
     def extract(self, image_url: str) -> ReceiptExtractionResult:
         """
@@ -207,6 +189,22 @@ Remember:
             
             # Validate required fields
             self._validate_schema(data)
+
+            # If extraction is empty, retry with fallback prompt
+            if not data.get('items') and not data.get('total') and not data.get('store', {}).get('name'):
+                logger.info("Empty extraction. Retrying with fallback prompt.")
+                retry = self.model.generate_content([
+                    self.EXTRACTION_PROMPT_FALLBACK,
+                    {
+                        "mime_type": "image/jpeg",
+                        "data": image_bytes
+                    }
+                ])
+                retry_text = retry.text.strip()
+                retry_json = self._extract_json(retry_text)
+                retry_data = json.loads(retry_json)
+                self._validate_schema(retry_data)
+                data = retry_data
 
             # Backward-compat mapping for older consumers
             store_info = data.get('store', {})
