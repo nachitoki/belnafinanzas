@@ -1,0 +1,236 @@
+﻿{
+    "updatedAt":  "2026-02-04T00:00:00Z",
+    "note":  "Progreso del proyecto completo (MVP + post-v1 + v2) con funciones post-v1 en modo beta.",
+    "phases":  [
+                   {
+                       "id":  "F1",
+                       "title":  "Fase 1 - Fundaciones",
+                       "highlight":  "Base del sistema, datos, navegación y flujo mínimo",
+                       "tasks":  [
+                                     {
+                                         "id":  "I-01",
+                                         "title":  "Modelo de datos / Firebase",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-02",
+                                         "title":  "Navegación principal + tabs",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-03",
+                                         "title":  "Configuración de flujo y distribución",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-04",
+                                         "title":  "Registro rápido de boletas (upload)",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-05",
+                                         "title":  "Listado de compras inteligente",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-06",
+                                         "title":  "Consultas iniciales / UI básica",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-07",
+                                         "title":  "Insights y alertas básicas",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "I-08",
+                                         "title":  "Exportación Markdown offline",
+                                         "status":  "done"
+                                     }
+                                 ]
+                   },
+                   {
+                       "id":  "F2",
+                       "title":  "Fase 2 - Bitácora y pensamiento",
+                       "highlight":  "Bitacora congelada hasta post-30. Solo mantener lo ya operativo.",
+                       "tasks":  [
+                                     {
+                                         "id":  "B-01",
+                                         "title":  "Observaciones automáticas (patrones + impacto)",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-02",
+                                         "title":  "Consultas con IA y contexto automático",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-03",
+                                         "title":  "Tarjetas y navegación por bloques",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-04",
+                                         "title":  "Conversión de consulta a idea",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-05",
+                                         "title":  "Detalle: respuesta + contextos",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-06",
+                                         "title":  "Aceptar idea como proyecto",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-07",
+                                         "title":  "Archivado + toggle de archivados",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-08",
+                                         "title":  "Mensajes IA vinculados a gráficos",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-09",
+                                         "title":  "Proyecto activo visible en Inicio",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "B-10",
+                                         "title":  "Exportación limpia + confirmaciones suaves",
+                                         "status":  "done"
+                                     }
+                                 ]
+                   },
+                   {
+                       "id":  "F3",
+                       "title":  "Fase 3 - Compras y despensa",
+                       "highlight":  "Registro, precios, tiendas, lista inteligente y normalización",
+                       "tasks":  [
+                                     {
+                                         "id":  "C-01",
+                                         "title":  "Lista de compras segmentada",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-02",
+                                         "title":  "Consulta de precios y sugerencias",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-03",
+                                         "title":  "Registro rápido y UI fija",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-04",
+                                         "title":  "Sugerencias de ahorro + ranking",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-05",
+                                         "title":  "Normalizador de nombres y marcas (alias)",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-06",
+                                         "title":  "Tiendas (lista + precios recientes)",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-07",
+                                         "title":  "Historial y filtros de tiendas",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "C-08",
+                                         "title":  "Integración con Despensa / platos base",
+                                         "status":  "done"
+                                     }
+                                 ]
+                   },
+                   {
+                       "id":  "F4",
+                       "title":  "Fase 4 - Flujo y estabilización",
+                       "highlight":  "Sinking funds, horizonte y buffer oculto",
+                       "tasks":  [
+                                     {
+                                         "id":  "F-01",
+                                         "title":  "Clasificación de compromisos (structural/provision)",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "F-02",
+                                         "title":  "Horizonte 30-60 días + alertas suaves",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "F-03",
+                                         "title":  "Fondo de estabilización invisible",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "F-04",
+                                         "title":  "Reglas IA para liquidez futura",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "F-05",
+                                         "title":  "Distribución del ingreso + gráfico (config)",
+                                         "status":  "done"
+                                     }
+                                 ]
+                   },
+                   {
+                       "id":  "F5",
+                       "title":  "Fase 5 - Estrategia y expansión",
+                       "highlight":  "Post-v1 y largo plazo",
+                       "tasks":  [
+                                     {
+                                         "id":  "P-01",
+                                         "title":  "Simulación avanzada de ideas",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "P-02",
+                                         "title":  "Insights IA avanzados",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "P-03",
+                                         "title":  "TCO y trade-offs entre ideas",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "P-04",
+                                         "title":  "Distribución % dinámica",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "P-05",
+                                         "title":  "Emoción opt-in en Bitácora",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "P-06",
+                                         "title":  "Rueda mensual ingresos/gastos",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "V2-01",
+                                         "title":  "Economía de los hijos",
+                                         "status":  "done"
+                                     },
+                                     {
+                                         "id":  "V2-02",
+                                         "title":  "Base NotebookLM / conocimiento",
+                                         "status":  "done"
+                                     }
+                                 ]
+                   }
+               ]
+}

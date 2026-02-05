@@ -1,0 +1,333 @@
+:root {
+  /* 1️⃣ TOKENS DE ESTADO (BASE) */
+  --status-green-bg: #E8F5E9;
+  --status-green-main: #2E7D32;
+
+  --status-yellow-bg: #FFF8E1;
+  --status-yellow-main: #F9A825;
+
+  --status-red-bg: #FDECEA;
+  --status-red-main: #C62828;
+
+  /* Neutrals */
+  --color-text-main: #1a202c;
+  --color-text-dim: #718096;
+  --bg-main: #f7fafc;
+  --bg-card: #ffffff;
+  --border-light: #e2e8f0;
+
+  /* 2️⃣ TIPOGRAFÍA */
+  --text-title-size: 1.6rem;
+  --text-title-weight: 600;
+
+  --text-body-size: 1rem;
+  --text-body-weight: 400;
+
+  --text-small-size: 0.85rem;
+
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  color: var(--color-text-main);
+  background-color: var(--bg-main);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+}
+
+.app-shell {
+  position: relative;
+  height: 100vh;
+  background: var(--bg-main);
+}
+
+.app-scroll {
+  height: 100vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: var(--topbar-height, 72px);
+  padding-bottom: calc(var(--bottomnav-height, 96px) + 12px);
+}
+
+/* Form defaults */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: var(--color-text-main);
+  outline: none;
+  box-shadow: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(46, 125, 50, 0.5);
+  box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.12);
+}
+
+button {
+  border-radius: 10px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.6;
+  }
+}
+
+/* Reset basics */
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+p {
+  color: var(--color-text-dim);
+  font-size: 0.9rem;
+}
+
+.page-subtitle {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+
+/* --- 3️⃣ COMPONENTE 1 — HouseholdStatusCard --- */
+.household-card {
+  border-radius: 20px;
+  padding: 22px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  margin-bottom: 18px;
+}
+
+.household-card.green {
+  background-color: var(--status-green-bg);
+  color: var(--status-green-main);
+}
+
+.household-card.yellow {
+  background-color: var(--status-yellow-bg);
+  color: var(--status-yellow-main);
+}
+
+.household-card.red {
+  background-color: var(--status-red-bg);
+  color: var(--status-red-main);
+}
+
+.household-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  line-height: 1;
+}
+
+.household-message {
+  font-size: var(--text-title-size);
+  font-weight: var(--text-title-weight);
+  margin-bottom: 24px;
+  /* Space for mascot */
+  line-height: 1.2;
+}
+
+/* --- 4️⃣ COMPONENTE 2 — Próximo en el Horizonte --- */
+.upcoming-container {
+  margin-bottom: 18px;
+  padding: 18px;
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+}
+
+.section-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.upcoming-item {
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.upcoming-item:last-child {
+  margin-bottom: 0;
+}
+
+.upcoming-item.green {
+  background: #F1F8F4;
+  color: var(--color-text-main);
+}
+
+.upcoming-item.yellow {
+  background: #FFFDE7;
+  color: var(--color-text-main);
+}
+
+.upcoming-item.red {
+  background: #FBE9E7;
+  color: var(--color-text-main);
+}
+
+.item-icon-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.6);
+  font-size: 1.2rem;
+}
+
+/* --- 5️⃣ COMPONENTE 3 — Zona de Gasto --- */
+.spending-card {
+  margin-bottom: 18px;
+  padding: 18px;
+  background-color: var(--bg-card);
+  border-radius: 14px;
+  border: 1px solid var(--border-light);
+  cursor: pointer;
+}
+
+.spending-bar {
+  height: 14px;
+  border-radius: 10px;
+  background-color: #E0E0E0;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.spending-bar-fill {
+  height: 100%;
+  width: 100%;
+  /* Default full width visual */
+  transition: background-color 0.3s ease;
+}
+
+.spending-bar-fill.green {
+  background-color: var(--status-green-main);
+}
+
+.spending-bar-fill.yellow {
+  background-color: var(--status-yellow-main);
+}
+
+.spending-bar-fill.red {
+  background-color: var(--status-red-main);
+}
+
+/* Loading helpers */
+.skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: pulse 1.6s ease-in-out infinite;
+  border-radius: 10px;
+}
+
+.loading-text {
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* --- 6️⃣ MASCOTA 🐶 --- */
+.mascot-slot {
+  position: absolute;
+  bottom: 0px;
+  right: 12px;
+  width: 100px;
+  /* Increased to 100px per user feedback */
+  height: 100px;
+  display: flex;
+  align-items: flex-end;
+  /* Anchor to bottom */
+  justify-content: center;
+  z-index: 10;
+}
+
+.mascot-slot img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}

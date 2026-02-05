@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user's household_id
+    function getUserHousehold() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.household_id;
+    }
+    
+    // Helper function to check if user belongs to the household
+    function belongsToHousehold(householdId) {
+      return isAuthenticated() && getUserHousehold() == householdId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Households and all subcollections
+    match /households/{householdId} {
+      allow read: if belongsToHousehold(householdId);
+      allow write: if belongsToHousehold(householdId);
+      
+      // All subcollections inherit household access control
+      match /{document=**} {
+        allow read: if belongsToHousehold(householdId);
+        allow write: if belongsToHousehold(householdId);
+      }
+    }
+  }
+}

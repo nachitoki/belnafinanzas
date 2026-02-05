@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user's household_id from Firestore
+    function getUserHousehold() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.household_id;
+    }
+    
+    // Receipt images: households/{householdId}/receipts/{receiptId}/{filename}
+    match /households/{householdId}/receipts/{receiptId}/{filename} {
+      // Users can upload to their own household
+      allow create: if isAuthenticated() && getUserHousehold() == householdId
+                    && request.resource.size < 10 * 1024 * 1024  // 10MB limit
+                    && request.resource.contentType.matches('image/.*');
+      
+      // Users can read from their own household
+      allow read: if isAuthenticated() && getUserHousehold() == householdId;
+      
+      // Users can delete from their own household
+      allow delete: if isAuthenticated() && getUserHousehold() == householdId;
+    }
+  }
+}

@@ -1,0 +1,121 @@
+{
+    "version": "1.1",
+    "last_updated": "2026-01-21",
+    "description": "Lista de productos estratégicos Clase A con unidades base para normalización",
+    "products": [
+        {
+            "name": "Arroz",
+            "category": "Despensa",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Fideos",
+            "category": "Despensa",
+            "unit_base": "kg",
+            "impact": "medio"
+        },
+        {
+            "name": "Harina 0000",
+            "category": "Despensa",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Aceite de Oliva",
+            "category": "Despensa",
+            "unit_base": "l",
+            "impact": "alto"
+        },
+        {
+            "name": "Salsa de Tomate",
+            "category": "Despensa",
+            "unit_base": "unit",
+            "impact": "medio"
+        },
+        {
+            "name": "Sal",
+            "category": "Despensa",
+            "unit_base": "kg",
+            "impact": "bajo"
+        },
+        {
+            "name": "Cebolla",
+            "category": "Verduras",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Zanahoria",
+            "category": "Verduras",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Pimentón",
+            "category": "Verduras",
+            "unit_base": "unit",
+            "impact": "medio"
+        },
+        {
+            "name": "Papas",
+            "category": "Verduras",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Choclo",
+            "category": "Verduras",
+            "unit_base": "g",
+            "impact": "medio"
+        },
+        {
+            "name": "Porotos Verdes",
+            "category": "Verduras",
+            "unit_base": "g",
+            "impact": "bajo"
+        },
+        {
+            "name": "Pollo",
+            "category": "Proteínas",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Carne Molida",
+            "category": "Proteínas",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Bistec",
+            "category": "Proteínas",
+            "unit_base": "kg",
+            "impact": "alto"
+        },
+        {
+            "name": "Nuggets",
+            "category": "Congelados",
+            "unit_base": "g",
+            "impact": "medio"
+        },
+        {
+            "name": "Crema sin Lactosa",
+            "category": "Lácteos",
+            "unit_base": "ml",
+            "impact": "medio"
+        },
+        {
+            "name": "Queso Rallado",
+            "category": "Lácteos",
+            "unit_base": "g",
+            "impact": "bajo"
+        },
+        {
+            "name": "Mantequilla",
+            "category": "Lácteos",
+            "unit_base": "g",
+            "impact": "medio"
+        }
+    ]
+}

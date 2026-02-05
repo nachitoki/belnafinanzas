@@ -1,0 +1,9 @@
+{
+    "name": "finanzas-familiares-root",
+    "version": "1.0.0",
+    "description": "Root for tool management",
+    "private": true,
+    "dependencies": {
+        "undici": "^7.19.2"
+    }
+}

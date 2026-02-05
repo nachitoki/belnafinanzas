@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Env files
+**/.env
+**/.env.local
+
+# Data exports / private
+Datos Notion/
+Boletas pruebas/
+clean_cookies.json
+cookies.txt
+notebook_output.txt
+notion_products_raw.txt
+notion_products_suggestions.csv
+
+# Media & design assets (optional: comment out if you want them)
+ANIMALES/
+ANimales croma.psd
+Animaci�n_de_animales_para_app.mp4
+Chelenko 2.png
+Chelenko feliz.png
+Chelenko y Luke 1.png
+Chelenko y Luke DEF.png
+Chelenko y Luke croma.png
+Chelenko.png
+
+# Build / cache
+frontend/dist/
+backend/venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+*.mp4
+
+*.mov
+*.mp4
+

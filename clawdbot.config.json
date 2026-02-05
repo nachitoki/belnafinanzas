@@ -1,0 +1,12 @@
+{
+    "gateway": {
+        "mode": "local"
+    },
+    "channels": {
+        "telegram": {
+            "enabled": true,
+            "botToken": "8577183349:AAH95ih8x0PI9wfQmVodF9i30hZiqC3gvlI",
+            "dmPolicy": "pairing"
+        }
+    }
+}
