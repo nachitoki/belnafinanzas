@@ -209,3 +209,21 @@ def update_commitment(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/commitments/{commitment_id}")
+def delete_commitment(
+    commitment_id: str,
+    user: dict = Depends(get_current_user),
+    db: Client = Depends(get_firestore)
+):
+    try:
+        household_id = user["household_id"]
+        ref = db.collection("households").document(household_id)\
+            .collection("commitments").document(commitment_id)
+        
+        ref.delete()
+        _CACHE.pop(household_id, None)
+        return {"success": True, "deleted": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

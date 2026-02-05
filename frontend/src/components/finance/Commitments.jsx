@@ -7,6 +7,8 @@ const Commitments = () => {
     const navigate = useNavigate();
     const [commitments, setCommitments] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Add Form State
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [frequency, setFrequency] = useState('monthly');
@@ -16,7 +18,14 @@ const Commitments = () => {
     const [installmentsPaid, setInstallmentsPaid] = useState('');
     const [hasInstallments, setHasInstallments] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    // Activity State
     const [actionSavingId, setActionSavingId] = useState(null);
+
+    // Edit Modal State
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState(null);
+    const [savingEdit, setSavingEdit] = useState(false);
 
     const parseNumber = (value) => {
         if (value === null || value === undefined) return 0;
@@ -85,7 +94,6 @@ const Commitments = () => {
             setInstallmentsPaid('');
             await loadCommitments();
         } catch (e) {
-            // ... existing error catch ...
             console.error('Error creating commitment', e);
             const detail = e.response?.data?.detail || e.message || 'Error desconocido';
             alert('Error al guardar: ' + detail);
@@ -94,7 +102,6 @@ const Commitments = () => {
         }
     };
 
-    // ... handlePay and handlePostpone ...
     const handlePay = (item) => {
         const confirm = window.confirm(`Marcar "${item.name}" como pagado por $${Number(item.amount).toLocaleString('es-CL')}?`);
         if (!confirm) return;
@@ -138,6 +145,41 @@ const Commitments = () => {
         }
     };
 
+    // Edit Handlers
+    const handleEditOpen = (item) => {
+        setEditingItem({
+            ...item,
+            has_installments: (item.installments_total > 0),
+            installments_paid: item.installments_paid || 0,
+            installments_total: item.installments_total || 0
+        });
+        setEditModalOpen(true);
+    };
+
+    const handleEditSubmit = async () => {
+        if (!editingItem || !editingItem.name) return;
+        setSavingEdit(true);
+        try {
+            await updateCommitment(editingItem.id, {
+                name: editingItem.name,
+                amount: parseNumber(editingItem.amount),
+                frequency: editingItem.frequency,
+                next_date: editingItem.next_date || null,
+                flow_category: editingItem.flow_category,
+                installments_total: editingItem.has_installments ? parseNumber(editingItem.installments_total) : 0,
+                installments_paid: editingItem.has_installments ? parseNumber(editingItem.installments_paid) : 0
+            });
+            setEditModalOpen(false);
+            setEditingItem(null);
+            await loadCommitments();
+        } catch (e) {
+            console.error('Error updating commitment', e);
+            alert('Error al actualizar');
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
     return (
         <div style={{ padding: '20px', maxWidth: '480px', margin: '0 auto', minHeight: 'calc(100vh - var(--topbar-height, 72px) - var(--bottomnav-height, 96px))' }}>
             {/* ... tabs and header ... */}
@@ -171,7 +213,6 @@ const Commitments = () => {
                     placeholder="Nombre (Arriendo, Luz, Internet, etc.)"
                     style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', marginBottom: '8px' }}
                 />
-                {/* ... Inputs Row 1 ... */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                     <input
                         value={amount}
@@ -199,7 +240,6 @@ const Commitments = () => {
                         </div>
                     )}
                 </div>
-                {/* ... Inputs Row 2 ... */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                     <input
                         value={nextDate}
@@ -218,7 +258,6 @@ const Commitments = () => {
                     </select>
                 </div>
 
-                {/* Installments Checkbox */}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontSize: '0.9rem', cursor: 'pointer' }}>
                     <input
                         type="checkbox"
@@ -228,7 +267,6 @@ const Commitments = () => {
                     <span>¿Es una compra en cuotas?</span>
                 </label>
 
-                {/* Installment Inputs */}
                 {hasInstallments && (
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                         <input
@@ -248,7 +286,6 @@ const Commitments = () => {
                         />
                     </div>
                 )}
-
 
                 <button
                     onClick={handleSave}
@@ -292,20 +329,36 @@ const Commitments = () => {
                             <div style={{ fontWeight: '700', color: 'var(--status-red-main)' }}>
                                 ${Number(c.amount || 0).toLocaleString('es-CL')}
                             </div>
-                            <button
-                                onClick={() => handleDelete(c.id)}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '1.2rem',
-                                    marginLeft: '10px',
-                                    opacity: 0.5
-                                }}
-                                title="Eliminar"
-                            >
-                                🗑️
-                            </button>
+                            <div style={{ display: 'flex' }}>
+                                <button
+                                    onClick={() => handleEditOpen(c)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '1.2rem',
+                                        marginLeft: '10px',
+                                        opacity: 0.5
+                                    }}
+                                    title="Editar"
+                                >
+                                    {'\u270F\uFE0F'}
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(c.id)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '1.2rem',
+                                        marginLeft: '4px',
+                                        opacity: 0.5
+                                    }}
+                                    title="Eliminar"
+                                >
+                                    🗑️
+                                </button>
+                            </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', borderTop: '1px solid #eee', paddingTop: '10px' }}>
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -382,22 +435,126 @@ const Commitments = () => {
                     </div>
                 ))
             )}
+
+            {/* EDIT MODAL */}
+            {editModalOpen && editingItem && (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+                }}>
+                    <div style={{ background: 'white', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '360px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <h3 style={{ marginTop: 0, textAlign: 'center' }}>Editar Compromiso</h3>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+                            <label style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>Nombre</label>
+                            <input
+                                value={editingItem.name}
+                                onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
+                                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                            />
+
+                            <label style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>Monto</label>
+                            <input
+                                value={editingItem.amount}
+                                onChange={e => setEditingItem({ ...editingItem, amount: e.target.value })}
+                                type="number"
+                                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                            />
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>Frecuencia</label>
+                                    <select
+                                        value={editingItem.frequency || 'monthly'}
+                                        onChange={e => setEditingItem({ ...editingItem, frequency: e.target.value })}
+                                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                    >
+                                        <option value="monthly">Mensual</option>
+                                        <option value="weekly">Semanal</option>
+                                        <option value="biweekly">Quincenal</option>
+                                        <option value="yearly">Anual</option>
+                                        <option value="one_time">Unico</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>Próx. Fecha</label>
+                                    <input
+                                        type="date"
+                                        value={editingItem.next_date ? editingItem.next_date.split('T')[0] : ''}
+                                        onChange={e => setEditingItem({ ...editingItem, next_date: e.target.value })}
+                                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <label style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>Categoría Flujo</label>
+                            <select
+                                value={editingItem.flow_category || 'structural'}
+                                onChange={e => setEditingItem({ ...editingItem, flow_category: e.target.value })}
+                                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                            >
+                                <option value="structural">Estructural</option>
+                                <option value="provision">Provisión</option>
+                                <option value="discretionary">Discrecional/Deuda</option>
+                            </select>
+
+                            {/* Edit Installments Logic */}
+                            <div style={{ borderTop: '1px dashed #eee', paddingTop: '10px', marginTop: '4px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer', marginBottom: '8px' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={editingItem.has_installments || false}
+                                        onChange={e => setEditingItem({ ...editingItem, has_installments: e.target.checked })}
+                                    />
+                                    <span>¿Es cuotas?</span>
+                                </label>
+
+                                {editingItem.has_installments && (
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.75rem', color: '#aaa' }}>Pagadas</label>
+                                            <input
+                                                type="number"
+                                                value={editingItem.installments_paid || 0}
+                                                onChange={e => setEditingItem({ ...editingItem, installments_paid: e.target.value })}
+                                                style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                            />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.75rem', color: '#aaa' }}>Total</label>
+                                            <input
+                                                type="number"
+                                                value={editingItem.installments_total || 0}
+                                                onChange={e => setEditingItem({ ...editingItem, installments_total: e.target.value })}
+                                                style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                                <button
+                                    onClick={() => setEditModalOpen(false)}
+                                    disabled={savingEdit}
+                                    style={{ flex: 1, padding: '12px', background: '#f5f5f5', border: 'none', borderRadius: '8px' }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleEditSubmit}
+                                    disabled={savingEdit}
+                                    style={{ flex: 1, padding: '12px', background: 'var(--status-blue-main)', color: 'white', border: 'none', borderRadius: '8px' }}
+                                >
+                                    {savingEdit ? 'Guardando...' : 'Guardar Cambios'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 export default Commitments;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
