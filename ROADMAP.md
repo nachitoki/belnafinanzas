@@ -868,6 +868,7 @@ Ingresos
 Compromisos
 - Recurrentes + deudas (lista)
 - Próximo pago destacado
+- Botón basurero para eliminar compromisos (reset rápido)
 
 Eventos
 - Anuales / técnicos / eventuales
