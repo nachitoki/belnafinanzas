@@ -100,7 +100,10 @@ const Commitments = () => {
         if (!confirm) return;
         setActionSavingId(item.id);
         updateCommitment(item.id, { action: 'pay' })
-            .then(loadCommitments)
+            .then(() => {
+                alert(`¡Pagado! Se ha registrado el gasto de "${item.name}" en tu flujo.`);
+                loadCommitments();
+            })
             .catch((e) => {
                 console.error('Error paying commitment', e);
                 const detail = e.response?.data?.detail || e.message || 'Error desconocido';

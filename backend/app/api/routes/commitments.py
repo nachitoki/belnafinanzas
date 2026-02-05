@@ -136,6 +136,38 @@ def update_commitment(
             if installments_total > 0 and installments_paid < installments_total:
                 updates["installments_paid"] = installments_paid + 1
 
+            # Create Transaction Record
+            try:
+                # 1. Get default account
+                accounts = db.collection("households").document(household_id).collection("accounts")\
+                    .where("is_active", "==", True).limit(1).stream()
+                account_id = next((a.id for a in accounts), None)
+                
+                if account_id:
+                    # 2. Get default category (Housing or Utilities for structural, or generic expense)
+                    # For simplicity, we search for a generic 'Gastos' or 'Compromisos' or first expense cat
+                    categories_ref = db.collection("households").document(household_id).collection("categories")
+                    cat_query = categories_ref.where("kind", "==", "expense").limit(1).stream()
+                    category_id = next((c.id for c in cat_query), "default_expense")
+
+                    # 3. Create Transaction
+                    amount = float(data.get("amount") or 0)
+                    transaction_data = {
+                        "occurred_on": datetime.now(),
+                        "amount": -abs(amount), # Expense is negative
+                        "description": f"Pago: {data.get('name')}",
+                        "category_id": category_id,
+                        "account_id": account_id,
+                        "status": "posted",
+                        "source": "commitment",
+                        "source_id": commitment_id,
+                        "created_at": datetime.now()
+                    }
+                    db.collection("households").document(household_id).collection("transactions").add(transaction_data)
+            except Exception as e:
+                print(f"Error creating transaction for commitment: {e}")
+                # Don't fail the update if transaction creation fails, but log it
+
             frequency = data.get("frequency", "monthly")
             next_date = _parse_date(data.get("next_date")) or datetime.now().date()
             if frequency == "weekly":

@@ -446,3 +446,56 @@ def reject_receipt(
     except Exception as e:
         logger.error(f"Failed to reject receipt: {e}")
         raise HTTPException(status_code=500, detail=f"Rejection failed: {str(e)}")
+
+
+@router.post("/receipts/manual", response_model=ReceiptConfirmResponse)
+def create_manual_receipt(
+    payload: ReceiptConfirmRequest,
+    user: dict = Depends(get_current_user),
+    db: Client = Depends(get_firestore)
+):
+    """
+    Create a manual receipt (expense) without image image.
+    Creates receipt doc and immediately confirms it to generate transaction.
+    """
+    household_id = user['household_id']
+    receipt_id = str(uuid.uuid4())
+    
+    # Import here to avoid circular dependency
+    from app.services.receipt_processor import ReceiptProcessor
+    
+    try:
+        # 1. Create Receipt Doc
+        receipt_data = {
+            'image_url': None,
+            'image_path': None,
+            'status': 'confirmed', # Born confirmed
+            'store_name': payload.store_name,
+            'total': payload.total,
+            'occurred_on': _to_iso(payload.date), # simple storage
+            'created_by': user['id'],
+            'created_at': datetime.now(),
+            'updated_at': datetime.now(),
+            'is_manual': True
+        }
+        
+        receipt_ref = db.collection('households').document(household_id)\
+            .collection('receipts').document(receipt_id)
+        receipt_ref.set(receipt_data)
+        
+        # 2. Process/Confirm (creates transaction)
+        processor = ReceiptProcessor(db)
+        result = processor.confirm_receipt(
+            receipt_id=receipt_id,
+            household_id=household_id,
+            corrections=payload.dict(),
+            user_id=user['id']
+        )
+        
+        return ReceiptConfirmResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to create manual receipt: {e}")
+        raise HTTPException(status_code=500, detail=f"Manual creation failed: {str(e)}")

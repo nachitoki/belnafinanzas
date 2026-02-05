@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { uploadReceipt, confirmReceipt, getStores } from '../../services/api';
+import { uploadReceipt, confirmReceipt, getStores, createManualReceipt } from '../../services/api';
 import ReceiptHistory from './ReceiptHistory';
 import ShoppingList from '../shopping/ShoppingList';
 import PillTabs from '../layout/PillTabs';
@@ -435,15 +435,15 @@ const Receipts = () => {
 
                 {/* ITEMS LIST START */}
                 <div style={{ margin: '20px 0', borderTop: '1px dashed var(--border-light)', paddingTop: '12px' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>ITEMS</span>
-                            <button
-                                onClick={addManualItem}
-                                style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #ddd', background: '#f8fafc', fontSize: '0.75rem' }}
-                            >
-                                + Agregar item
-                            </button>
-                        </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>ITEMS</span>
+                        <button
+                            onClick={addManualItem}
+                            style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #ddd', background: '#f8fafc', fontSize: '0.75rem' }}
+                        >
+                            + Agregar item
+                        </button>
+                    </div>
                     {(!scannedData.items || scannedData.items.length === 0) && (
                         <div style={{ fontStyle: 'italic', color: '#aaa', fontSize: '0.8rem' }}>
                             No se detectaron items. Agrega manualmente si lo necesitas.
@@ -461,101 +461,101 @@ const Receipts = () => {
                         </button>
                     )}
                     {scannedData.items && scannedData.items.map((item, idx) => {
-                            const suggestion = suggestNormalization(item.name_raw);
-                            const showSuggestion =
-                                suggestion && (!item.name_clean || normalizeText(item.name_clean) !== normalizeText(suggestion.clean));
+                        const suggestion = suggestNormalization(item.name_raw);
+                        const showSuggestion =
+                            suggestion && (!item.name_clean || normalizeText(item.name_clean) !== normalizeText(suggestion.clean));
 
-                            return (
-                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px', borderBottom: '1px dashed var(--border-light)', paddingBottom: '10px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        return (
+                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px', borderBottom: '1px dashed var(--border-light)', paddingBottom: '10px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <input
+                                        type="text"
+                                        value={item.name_raw}
+                                        onChange={(e) => handleItemChange(idx, 'name_raw', e.target.value)}
+                                        style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px' }}
+                                    />
+                                    {showSuggestion && (
+                                        <div style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--color-text-dim)', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                            <span>
+                                                Sugerencia: <strong>{suggestion.clean}</strong>{suggestion.brand ? ` · ${suggestion.brand}` : ''}
+                                            </span>
+                                            <button
+                                                onClick={() => applyNormalization(idx, suggestion.clean, suggestion.brand || '')}
+                                                style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #ddd', background: '#f8fafc', fontSize: '0.75rem' }}
+                                            >
+                                                Aplicar
+                                            </button>
+                                            <button
+                                                onClick={() => applyNormalizationBulk(item.name_raw, suggestion.clean, suggestion.brand || '')}
+                                                style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #e2e8f0', background: 'white', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}
+                                            >
+                                                Aplicar a todos
+                                            </button>
+                                        </div>
+                                    )}
+                                    <div style={{ display: 'flex', gap: '6px' }}>
                                         <input
                                             type="text"
-                                            value={item.name_raw}
-                                            onChange={(e) => handleItemChange(idx, 'name_raw', e.target.value)}
-                                            style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px' }}
+                                            value={item.name_clean || ''}
+                                            onChange={(e) => applyNormalization(idx, e.target.value, item.name_brand || '')}
+                                            placeholder="Nombre limpio"
+                                            style={{ flex: 1, minWidth: 0, border: '1px solid #eee', padding: '6px', borderRadius: '6px', fontSize: '0.85rem' }}
                                         />
-                                        {showSuggestion && (
-                                            <div style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--color-text-dim)', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                                                <span>
-                                                    Sugerencia: <strong>{suggestion.clean}</strong>{suggestion.brand ? ` · ${suggestion.brand}` : ''}
-                                                </span>
-                                                <button
-                                                    onClick={() => applyNormalization(idx, suggestion.clean, suggestion.brand || '')}
-                                                    style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #ddd', background: '#f8fafc', fontSize: '0.75rem' }}
-                                                >
-                                                    Aplicar
-                                                </button>
-                                                <button
-                                                    onClick={() => applyNormalizationBulk(item.name_raw, suggestion.clean, suggestion.brand || '')}
-                                                    style={{ padding: '2px 8px', borderRadius: '999px', border: '1px solid #e2e8f0', background: 'white', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}
-                                                >
-                                                    Aplicar a todos
-                                                </button>
-                                            </div>
-                                        )}
-                                        <div style={{ display: 'flex', gap: '6px' }}>
-                                            <input
-                                                type="text"
-                                                value={item.name_clean || ''}
-                                                onChange={(e) => applyNormalization(idx, e.target.value, item.name_brand || '')}
-                                                placeholder="Nombre limpio"
-                                                style={{ flex: 1, minWidth: 0, border: '1px solid #eee', padding: '6px', borderRadius: '6px', fontSize: '0.85rem' }}
-                                            />
-                                            <input
-                                                type="text"
-                                                value={item.name_brand || ''}
-                                                onChange={(e) => applyNormalization(idx, item.name_clean || '', e.target.value)}
-                                                placeholder="Marca (opcional)"
-                                                style={{ flex: 1, minWidth: 0, border: '1px solid #eee', padding: '6px', borderRadius: '6px', fontSize: '0.85rem' }}
-                                            />
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <input
-                                                type="number"
-                                                value={item.qty}
-                                                onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
-                                                style={{ width: '64px', border: '1px solid #eee', padding: '6px', textAlign: 'center', fontSize: '0.9rem', borderRadius: '6px' }}
-                                            />
-                                            <span style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>cantidad</span>
-                                        </div>
+                                        <input
+                                            type="text"
+                                            value={item.name_brand || ''}
+                                            onChange={(e) => applyNormalization(idx, item.name_clean || '', e.target.value)}
+                                            placeholder="Marca (opcional)"
+                                            style={{ flex: 1, minWidth: 0, border: '1px solid #eee', padding: '6px', borderRadius: '6px', fontSize: '0.85rem' }}
+                                        />
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                            Precio unitario
-                                            <input
-                                                type="number"
-                                                value={item.unit_price || ''}
-                                                onChange={(e) => handleItemChange(idx, 'unit_price', e.target.value)}
-                                                style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px', textAlign: 'right' }}
-                                                placeholder="$"
-                                            />
-                                        </label>
-                                        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                            Descuento
-                                            <input
-                                                type="number"
-                                                value={item.discount || ''}
-                                                onChange={(e) => handleItemChange(idx, 'discount', e.target.value)}
-                                                style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px', textAlign: 'right' }}
-                                                placeholder="$"
-                                            />
-                                        </label>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
-                                        <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                            Total
-                                            <input
-                                                type="number"
-                                                value={item.line_total || ''}
-                                                onChange={(e) => handleItemChange(idx, 'line_total', e.target.value)}
-                                                style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px', textAlign: 'right', fontWeight: 'bold' }}
-                                                placeholder="$"
-                                            />
-                                        </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <input
+                                            type="number"
+                                            value={item.qty}
+                                            onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
+                                            style={{ width: '64px', border: '1px solid #eee', padding: '6px', textAlign: 'center', fontSize: '0.9rem', borderRadius: '6px' }}
+                                        />
+                                        <span style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>cantidad</span>
                                     </div>
                                 </div>
-                            );
-                        })}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                        Precio unitario
+                                        <input
+                                            type="number"
+                                            value={item.unit_price || ''}
+                                            onChange={(e) => handleItemChange(idx, 'unit_price', e.target.value)}
+                                            style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px', textAlign: 'right' }}
+                                            placeholder="$"
+                                        />
+                                    </label>
+                                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                        Descuento
+                                        <input
+                                            type="number"
+                                            value={item.discount || ''}
+                                            onChange={(e) => handleItemChange(idx, 'discount', e.target.value)}
+                                            style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px', textAlign: 'right' }}
+                                            placeholder="$"
+                                        />
+                                    </label>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                        Total
+                                        <input
+                                            type="number"
+                                            value={item.line_total || ''}
+                                            onChange={(e) => handleItemChange(idx, 'line_total', e.target.value)}
+                                            style={{ width: '100%', border: '1px solid #eee', padding: '6px', borderRadius: '6px', textAlign: 'right', fontWeight: 'bold' }}
+                                            placeholder="$"
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
                 {/* ITEMS LIST END */}
 

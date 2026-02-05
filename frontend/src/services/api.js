@@ -72,6 +72,15 @@ export const rejectReceipt = async (receiptId) => {
     } catch (error) { throw error; }
 };
 
+export const createManualReceipt = async (payload) => {
+    try {
+        const response = await axios.post(`${API_URL}/receipts/manual`, payload, {
+            timeout: REQUEST_TIMEOUT_MS,
+        });
+        return response.data;
+    } catch (error) { throw error; }
+};
+
 export const getDashboardSummary = async () => {
     try {
         const response = await axios.get(`${API_URL}/dashboard/summary`, {
