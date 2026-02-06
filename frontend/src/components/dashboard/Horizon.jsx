@@ -6,6 +6,8 @@ const Horizon = ({ initialItems }) => {
     const [items, setItems] = useState(initialItems || []);
     const [loading, setLoading] = useState(!initialItems);
 
+    const [filterMode, setFilterMode] = useState('all'); // 'all', 'current', 'next'
+
     useEffect(() => {
         if (initialItems) {
             setItems(initialItems);
@@ -14,6 +16,7 @@ const Horizon = ({ initialItems }) => {
         }
 
         const load = async () => {
+            // ... existing load logic
             try {
                 const data = await getHorizon();
                 setItems(data || []);
@@ -49,6 +52,7 @@ const Horizon = ({ initialItems }) => {
     };
 
     const chipStyle = (tone) => {
+        // ... existing chipStyle
         if (tone === 'danger') {
             return { background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5' };
         }
@@ -58,6 +62,7 @@ const Horizon = ({ initialItems }) => {
         return { background: '#E2E8F0', color: '#475569', border: '1px solid #CBD5F5' };
     };
 
+    // ... helpers
     const softAlert = (item) => {
         const pct = Number(item?.impact_pct || 0);
         if (pct >= 5) return { tone: 'danger', label: 'Alerta suave' };
@@ -79,7 +84,35 @@ const Horizon = ({ initialItems }) => {
         return formatted;
     };
 
-    const grouped = items.reduce((acc, it) => {
+    // Filter Logic
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Naively handle next month rollover
+    const nextMonthDate = new Date(currentYear, currentMonth + 1, 1);
+    const nextMonth = nextMonthDate.getMonth();
+    const nextMonthYear = nextMonthDate.getFullYear();
+
+    const monthName = (m) => {
+        const names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        return names[m];
+    };
+
+    const filteredItems = items.filter(item => {
+        if (filterMode === 'all') return true;
+        if (!item.date) return false;
+        const d = new Date(item.date);
+        if (filterMode === 'current') {
+            return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        }
+        if (filterMode === 'next') {
+            return d.getMonth() === nextMonth && d.getFullYear() === nextMonthYear;
+        }
+        return false;
+    });
+
+    const grouped = filteredItems.reduce((acc, it) => {
         const key = it.date || 'sin-fecha';
         acc[key] = acc[key] || [];
         acc[key].push(it);
@@ -99,7 +132,35 @@ const Horizon = ({ initialItems }) => {
                 Proximos 60 dias
             </div>
 
-            {!loading && items.length > 0 && (
+            {/* Filter Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                {[
+                    { key: 'all', label: 'Todo' },
+                    { key: 'current', label: monthName(currentMonth) },
+                    { key: 'next', label: monthName(nextMonth) }
+                ].map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setFilterMode(tab.key)}
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: '999px',
+                            border: 'none',
+                            fontSize: '0.8rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            background: filterMode === tab.key ? 'var(--primary-main)' : 'var(--bg-card)',
+                            color: filterMode === tab.key ? '#fff' : 'var(--color-text-dim)',
+                            boxShadow: filterMode === tab.key ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {!loading && (
                 <div style={{
                     background: 'var(--bg-card)',
                     padding: '16px',
@@ -114,12 +175,14 @@ const Horizon = ({ initialItems }) => {
                     overflow: 'hidden'
                 }}>
                     <div style={{ zIndex: 1 }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>Total Proyectado</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                            {filterMode === 'all' ? 'Total Proyectado (60d)' : `Total ${filterMode === 'current' ? monthName(currentMonth) : monthName(nextMonth)}`}
+                        </div>
                         <div style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--color-text-main)' }}>
-                            ${Math.round(items.reduce((acc, it) => acc + Number(it.amount || 0), 0)).toLocaleString('es-CL')}
+                            ${Math.round(filteredItems.reduce((acc, it) => acc + Number(it.amount || 0), 0)).toLocaleString('es-CL')}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginTop: '4px' }}>
-                            {items.length} items en cola
+                            {filteredItems.length} items en cola
                         </div>
                     </div>
 
@@ -131,12 +194,13 @@ const Horizon = ({ initialItems }) => {
                             height: '80px',
                             objectFit: 'contain',
                             marginRight: '-10px',
-                            marginBottom: '-10px'
+                            marginBottom: '-10px',
+                            opacity: 0.8
                         }}
                     />
                 </div>
             )}
-            {!loading && items.length > 0 && (
+            {!loading && filteredItems.length > 0 && filterMode === 'all' && (
                 <div style={{ marginBottom: '10px', fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
                     IA: Revisa los impactos con alerta suave esta semana.
                 </div>
