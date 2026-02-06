@@ -8,6 +8,7 @@ node_modules/
 # Data exports / private
 # Datos Notion/
 # Boletas pruebas/
+Datos Notion/**/*.zip
 clean_cookies.json
 cookies.txt
 notebook_output.txt

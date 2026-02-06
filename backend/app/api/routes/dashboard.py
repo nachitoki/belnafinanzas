@@ -22,3 +22,19 @@ def get_dashboard_summary(
         return service.get_dashboard_summary(user['household_id'])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/settings")
+def update_dashboard_settings(
+    settings: dict,
+    user: dict = Depends(get_current_user),
+    db: Client = Depends(get_firestore)
+):
+    """
+    Update Household Settings (e.g. food_budget)
+    """
+    try:
+        service = DashboardService(db)
+        service.update_settings(user['household_id'], settings)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

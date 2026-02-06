@@ -1,6 +1,7 @@
 # Environment
 .env
-# service-account-key.json
+.env
+service-account-key.json
 
 # Python
 __pycache__/

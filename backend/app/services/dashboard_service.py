@@ -207,17 +207,78 @@ class DashboardService:
             dist_result["vida"] = round((real_vida / total_income) * 100)
             dist_result["blindaje"] = round((real_blindaje / total_income) * 100)
 
+        # 7. Food Budget Logic
+        # Fetch budget from household metadata or default
+        household_ref = self.db.collection('households').document(household_id)
+        household_snap = household_ref.get()
+        household_data = household_snap.to_dict() if household_snap.exists else {}
+        settings_data = household_data.get('settings', {})
+        
+        # User requested 500k default
+        food_budget_limit = float(settings_data.get('food_budget', 500000))
+        
+        # Calculate food spending (current month)
+        food_spent = 0.0
+        # Identify "Food" categories - simplified matching
+        # In a robust system, we'd use a flag in the category document, but name matching works for MVP
+        food_keywords = ["supermercado", "comida", "alimento", "restaurante", "jumbo", "lider", "unimarc", "santa isabel"]
+        
+        for tx in transactions_objects:
+            # We filter transactions from step 1 (last 30 days) but we specifically want CURRENT MONTH for budget
+            if tx.date >= month_start:
+                 # Check category name from map
+                 cat_name = (cat_map.get(tx.category, {}).get('name') or "").lower()
+                 if any(k in cat_name for k in food_keywords):
+                     food_spent += tx.amount
+
+        # Also check raw transactions that might not be in transactions_objects if window differs, 
+        # but transactions_objects is last 30 days. 
+        # Actually, query_start was set to month_start - 1 so we have cover.
+        # Wait, trans_docs (all_transactions_data) covers query_start (start of month).
+        # transactions_objects covers last 30 days.
+        # We should iterate over `all_transactions_data` for accuracy if current day > 30th.
+        
+        food_spent = 0.0
+        for data in all_transactions_data:
+             parsed_date = data.get('parsed_date')
+             if parsed_date and parsed_date >= month_start:
+                 amount = float(data.get('amount', 0))
+                 if amount < 0: # Expense
+                     cat_id = data.get('category_id')
+                     cat_name = (cat_map.get(cat_id, {}).get('name') or "").lower()
+                     if any(k in cat_name for k in food_keywords):
+                         food_spent += abs(amount)
+
         result = {
             "household_status": household_status.value,
             "status_message": status_msg,
             "upcoming_items": upcoming_items, 
             "spending_zone": { "status": spending_status.value, "label": spending_label },
             "month_overview": month_overview,
-            "distribution_real": dist_result
+            "distribution_real": dist_result,
+            "food_budget": {
+                "limit": food_budget_limit,
+                "spent": food_spent,
+                "remaining": max(food_budget_limit - food_spent, 0),
+                "progress": min(100, round((food_spent / food_budget_limit) * 100)) if food_budget_limit > 0 else 0
+            }
         }
         _CACHE["ts"] = now
         _CACHE["data"] = result
         return result
+
+    def update_settings(self, household_id: str, updates: Dict[str, Any]) -> None:
+        """Update household settings (e.g. food_budget)"""
+        ref = self.db.collection('households').document(household_id)
+        # Use set with merge to update deep fields map
+        # Firestore dot notation for nested update
+        update_dict = {}
+        for k, v in updates.items():
+            update_dict[f"settings.{k}"] = v
+            
+        ref.update(update_dict)
+        # Invalidate cache
+        _CACHE["ts"] = None
 
     def _compute_month_overview_memory(self, incomes, commitments, events, household_id, now, months_ahead=3):
         month_start = datetime(now.year, now.month, 1)

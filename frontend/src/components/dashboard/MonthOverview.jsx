@@ -1,15 +1,18 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { loadDistributionMeta } from '../../utils/distributionMeta';
-import { askBitacora } from '../../services/api';
+import { askBitacora, updateDashboardSettings } from '../../services/api';
 
 const DASHBOARD_AI_CACHE_KEY = 'ai_dashboard_cache_v1';
 
-const MonthOverview = ({ data, distributionReal, projectEntry }) => {
+const MonthOverview = ({ data, distributionReal, projectEntry, foodBudget, onRefresh }) => {
     if (!data) return null;
 
     const [aiMessage, setAiMessage] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const [aiExpanded, setAiExpanded] = useState(false);
+    const [isEditingBudget, setIsEditingBudget] = useState(false);
+    const [newBudget, setNewBudget] = useState(foodBudget?.limit || 500000);
+    const [savingBudget, setSavingBudget] = useState(false);
 
     const fmt = (n) => Math.round(Number(n || 0)).toLocaleString('es-CL');
     const incomeTotal = Number(data.income_total || 0);
@@ -161,6 +164,20 @@ const MonthOverview = ({ data, distributionReal, projectEntry }) => {
         return () => { active = false; };
     }, [aiContextKey, incomeTotal, commitmentsTotal, eventsMandatory, eventsOptional, pctOxigeno, pctVida, pctBlindaje, pulseState, projectedBalance]);
 
+    const handleSaveBudget = async () => {
+        setSavingBudget(true);
+        try {
+            await updateDashboardSettings({ food_budget: newBudget });
+            setIsEditingBudget(false);
+            if (onRefresh) onRefresh();
+        } catch (error) {
+            console.error("Failed to save budget", error);
+            alert("Error al guardar presupuesto");
+        } finally {
+            setSavingBudget(false);
+        }
+    };
+
     return (
         <div className="spending-card">
             <div className="section-title">Cómo viene el mes</div>
@@ -217,6 +234,86 @@ const MonthOverview = ({ data, distributionReal, projectEntry }) => {
                     </div>
                 )}
             </div>
+
+            {/* Food Budget Section */}
+            {foodBudget && (
+                <div style={{ marginTop: '14px', borderTop: '1px dashed var(--border-light)', paddingTop: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                            Presupuesto Supermercado
+                        </div>
+                        <div
+                            onClick={() => { setIsEditingBudget(true); setNewBudget(foodBudget.limit || 500000); }}
+                            style={{ fontSize: '0.75rem', color: 'var(--primary-main)', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                            {isEditingBudget ? '' : 'Editar'}
+                        </div>
+                    </div>
+
+                    {isEditingBudget ? (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                            <input
+                                type="number"
+                                value={newBudget}
+                                onChange={(e) => setNewBudget(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '6px',
+                                    border: '1px solid var(--border-light)',
+                                    borderRadius: '6px',
+                                    fontSize: '0.9rem'
+                                }}
+                            />
+                            <button
+                                onClick={handleSaveBudget}
+                                disabled={savingBudget}
+                                style={{
+                                    background: 'var(--primary-main)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '6px 10px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {savingBudget ? '...' : 'OK'}
+                            </button>
+                            <button
+                                onClick={() => setIsEditingBudget(false)}
+                                disabled={savingBudget}
+                                style={{
+                                    background: '#cbd5e0',
+                                    color: '#4a5568',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '6px 10px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                X
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div style={{ display: 'flex', height: '10px', borderRadius: '999px', overflow: 'hidden', background: '#e2e8f0' }}>
+                                <div style={{
+                                    width: `${Math.min(foodBudget.progress, 100)}%`,
+                                    background: foodBudget.progress > 100 ? 'var(--status-red-main)' : foodBudget.progress > 80 ? 'var(--status-yellow-main)' : 'var(--status-green-main)',
+                                    transition: 'width 0.5s ease-in-out'
+                                }} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '4px' }}>
+                                <span style={{ color: 'var(--color-text-dim)' }}>
+                                    Gastado: {fmt(foodBudget.spent)} / {fmt(foodBudget.limit)}
+                                </span>
+                                <span style={{ fontWeight: '600', color: foodBudget.remaining > 0 ? 'var(--status-green-main)' : 'var(--status-red-main)' }}>
+                                    {foodBudget.remaining > 0 ? `Quedan ${fmt(foodBudget.remaining)}` : `Exceso ${fmt(Math.abs(foodBudget.remaining))}`}
+                                </span>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
 
             <div style={{ marginTop: '14px' }}>
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '6px' }}>

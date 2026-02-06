@@ -22,41 +22,26 @@ const Dashboard = () => {
     const alertsRef = useRef(null);
     const projectRef = useRef(null);
 
-    useEffect(() => {
-        const cachedRaw = window.localStorage.getItem('dashboard_cache_v1');
-        if (cachedRaw) {
-            try {
-                const cached = JSON.parse(cachedRaw);
-                if (cached?.data) {
-                    setData(cached.data);
-                    setLoading(false);
-                }
-            } catch (e) {
-                console.warn('Invalid dashboard cache', e);
+    const fetchData = React.useCallback(async (isRetry = false) => {
+        try {
+            const result = await getDashboardSummary();
+            setData(result);
+            window.localStorage.setItem('dashboard_cache_v1', JSON.stringify({ ts: Date.now(), data: result }));
+            retryRef.current = false;
+        } catch (e) {
+            console.error('Dashboard fetch failed', e);
+            if (!isRetry && !retryRef.current) {
+                retryRef.current = true;
+                setTimeout(() => fetchData(true), 2000);
             }
+        } finally {
+            setLoading(false);
         }
-
-        const fetchData = async (isRetry = false) => {
-            try {
-                const result = await getDashboardSummary();
-                setData(result);
-                window.localStorage.setItem('dashboard_cache_v1', JSON.stringify({ ts: Date.now(), data: result }));
-                retryRef.current = false;
-            } catch (e) {
-                console.error('Dashboard fetch failed', e);
-                if (!isRetry && !retryRef.current) {
-                    retryRef.current = true;
-                    setTimeout(() => fetchData(true), 2000);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
     }, []);
 
     useEffect(() => {
+        fetchData();
+
         const loadProject = async () => {
             setProjectLoading(true);
             try {
@@ -78,7 +63,7 @@ const Dashboard = () => {
             }
         };
         loadProject();
-    }, []);
+    }, [fetchData]);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -147,26 +132,13 @@ const Dashboard = () => {
                     <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
                         Distribucion + pulso mensual
                     </div>
-                    <div style={{ marginTop: '10px' }}>
-                        <button
-                            onClick={() => navigate('/configuracion')}
-                            style={{
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                border: '1px solid var(--border-light)',
-                                background: '#f7fafc',
-                                cursor: 'pointer',
-                                fontSize: '0.8rem'
-                            }}
-                        >
-                            Ajustar porcentajes en Configuracion
-                        </button>
-                    </div>
                 </div>
                 <MonthOverview
                     data={data.month_overview}
                     distributionReal={data.distribution_real}
+                    foodBudget={data.food_budget}
                     projectEntry={projectEntry}
+                    onRefresh={fetchData}
                 />
             </div>
 
