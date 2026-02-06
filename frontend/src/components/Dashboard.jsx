@@ -1,12 +1,14 @@
+```javascript
 import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getDashboardSummary, getBitacora } from '../services/api';
 import HouseholdStatusCard from './dashboard/HouseholdStatusCard';
+import MonthOverview from './dashboard/MonthOverview';
 import Horizon from './dashboard/Horizon';
 import SpendingZone from './dashboard/SpendingZone';
-import MonthOverview from './dashboard/MonthOverview';
-import Alerts from './dashboard/Alerts';
 import PillTabs from './layout/PillTabs';
+import Alerts from './dashboard/Alerts';
+import QuickAddExpense from './dashboard/QuickAddExpense';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -16,6 +18,8 @@ const Dashboard = () => {
     const [projectEntry, setProjectEntry] = useState(null);
     const [projectLoading, setProjectLoading] = useState(true);
     const retryRef = useRef(false);
+    
+    // Refs for scrolling
     const statusRef = useRef(null);
     const horizonRef = useRef(null);
     const monthRef = useRef(null);
@@ -41,30 +45,32 @@ const Dashboard = () => {
 
     useEffect(() => {
         fetchData();
-
+        
+        // Load Project logic
         const loadProject = async () => {
-            setProjectLoading(true);
-            try {
-                const data = await getBitacora();
-                const projects = Array.isArray(data)
-                    ? data.filter((entry) => String(entry.kind || '').toLowerCase() === 'project')
-                    : [];
-                if (projects.length > 0) {
-                    projects.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-                    setProjectEntry(projects[0]);
-                } else {
-                    setProjectEntry(null);
-                }
-            } catch (e) {
-                console.error('Error loading projects', e);
-                setProjectEntry(null);
-            } finally {
-                setProjectLoading(false);
-            }
-        };
-        loadProject();
+             setProjectLoading(true);
+             try {
+                 const data = await getBitacora();
+                 const projects = Array.isArray(data) 
+                     ? data.filter((entry) => String(entry.kind || '').toLowerCase() === 'project')
+                     : [];
+                 if (projects.length > 0) {
+                     projects.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                     setProjectEntry(projects[0]);
+                 } else {
+                     setProjectEntry(null);
+                 }
+             } catch (e) {
+                 console.error('Error loading projects', e);
+                 setProjectEntry(null);
+             } finally {
+                 setProjectLoading(false);
+             }
+         };
+         loadProject();
     }, [fetchData]);
 
+    // Scroll to tab logic
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const tab = params.get('tab');
@@ -86,6 +92,7 @@ const Dashboard = () => {
         maxWidth: '480px',
         margin: '0 auto',
         minHeight: 'calc(100vh - var(--topbar-height, 72px) - var(--bottomnav-height, 96px))',
+        position: 'relative'
     };
 
     if (loading) {
@@ -99,18 +106,22 @@ const Dashboard = () => {
             </div>
         );
     }
+    
     if (!data) return <div style={{ padding: '20px', textAlign: 'center', color: 'var(--status-red-main)' }}>Error al cargar datos.</div>;
 
     const {
         household_status = 'green',
         status_message = '',
         upcoming_items = [],
-        spending_zone = { status: 'green', label: 'Cargando...' }
+        spending_zone = { status: 'green', label: 'Cargando...' },
+        month_overview = {},
+        distribution_real = {},
+        food_budget = null
     } = data || {};
 
     return (
         <div style={containerStyle}>
-            <PillTabs
+             <PillTabs
                 items={[
                     { label: 'Estado', path: '/?tab=estado', icon: '\u26FD' },
                     { label: 'Horizonte', path: '/?tab=horizonte', icon: '\uD83D\uDCC5' },
@@ -119,6 +130,7 @@ const Dashboard = () => {
                     { label: 'Proyecto', path: '/?tab=proyecto', icon: '\uD83C\uDFAF' }
                 ]}
             />
+            
             {/* Header */}
             <div style={{ marginBottom: '24px', marginTop: '10px' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-text-main)' }}>Estado del Hogar</h2>
@@ -134,9 +146,9 @@ const Dashboard = () => {
                     </div>
                 </div>
                 <MonthOverview
-                    data={data.month_overview}
-                    distributionReal={data.distribution_real}
-                    foodBudget={data.food_budget}
+                    data={month_overview}
+                    distributionReal={distribution_real}
+                    foodBudget={food_budget}
                     projectEntry={projectEntry}
                     onRefresh={fetchData}
                 />
@@ -171,7 +183,7 @@ const Dashboard = () => {
                     </div>
                     {projectEntry && (
                         <button
-                            onClick={() => navigate(`/bitacora/${projectEntry.id}`)}
+                            onClick={() => navigate(`/ bitacora / ${ projectEntry.id } `)}
                             style={{
                                 padding: '6px 10px',
                                 borderRadius: '6px',
@@ -205,10 +217,13 @@ const Dashboard = () => {
                 status={spending_zone.status}
                 label={spending_zone.label}
             />
+            
+            {/* Quick Add Button */}
+            <QuickAddExpense onExpenseAdded={fetchData} />
 
         </div>
     );
 };
 
 export default Dashboard;
-
+```
