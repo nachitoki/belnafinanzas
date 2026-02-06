@@ -1,0 +1,10 @@
+# Telefonos Agosto/Septiembre Agustin
+
+Categoría: PRÉSTAMO
+Monto: CLP 145,000
+Tipo: Gasto
+Fecha: October 1, 2025
+Estado: 📅 Proyectado
+MES: 10-2025
+Pagado: No
+Recurrente: No

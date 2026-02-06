@@ -1,0 +1,11 @@
+# compra carne Los Corrales
+
+Categoría: Alimentos
+Monto: CLP 55,575
+Tipo: Gasto
+Fecha: September 1, 2025
+Comprobante: Archivo_escaneado_20250920-1357.pdf
+Estado: ✅ Ejecutado
+MES: 09-2025
+Pagado: No
+Recurrente: No

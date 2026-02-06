@@ -1,0 +1,15 @@
+# @Papas
+
+Acumulación ingredientes: https://www.notion.so/24688a385be780638864d966d171d60e, https://www.notion.so/24788a385be780099d9bde63659291db, https://www.notion.so/24788a385be7800f9befd7751f2419e6, https://www.notion.so/24788a385be7801d97c1c7eaedbecac4, https://www.notion.so/24788a385be7802aba72f4c0d91a8346, https://www.notion.so/24788a385be7803195e4f43c377aff6b, https://www.notion.so/24788a385be780568f6aca927f3366de, https://www.notion.so/24788a385be78087b604fe7ca9048248, https://www.notion.so/24788a385be780c380c4ddda81b13beb, https://www.notion.so/24788a385be780f2848cee22597c2fab
+Cantidad en Unidad Base Despensa: 1000
+Cantidad necesaria: 800
+Unidad de medida de receta: Gr
+Cantidad necesaria en unidad base: 800
+Costo del ingrediente en la receta: CLP 384
+Precio gramo: 0.48
+Precio por unidad de despensa: 12000
+Producto de despensa: Papas (../Despensa%20Productos%20(Maestra)/Papas%2024688a385be78051952ef07bb7a71e4d.md)
+RECETA: Cazuela (../Recetario%20Familiar/Cazuela%2024788a385be7800eae23c4ba186ccef2.md)
+Comprado: No
+Conteo Programados: 1
+gramos programados: 800

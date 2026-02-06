@@ -1,0 +1,10 @@
+# Bencina
+
+Categoría: Transporte
+Monto: CLP 30,000
+Tipo: Gasto
+Fecha: October 1, 2025
+Estado: 📅 Proyectado
+MES: 10-2025
+Pagado: No
+Recurrente: No

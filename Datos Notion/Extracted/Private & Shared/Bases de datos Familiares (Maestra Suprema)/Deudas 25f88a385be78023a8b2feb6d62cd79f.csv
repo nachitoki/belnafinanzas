@@ -1,0 +1,6 @@
+﻿Nombre de la deuda,Monto total,Cuota mensual,Cuotas restantes,Interes,Fecha de finalizacion,Transacción (relación)
+Transacciones familiares (Maestra),,,,,,
+Préstamo 600K (6 cuotas),600000,100000,6,0,"February 28, 2026",
+Préstamo 850K (4 cuotas),850000,200000,4,0,"December 31, 2025",
+Préstamo 2.88M (24 cuotas),2880000,120000,24,0.44,"August 31, 2027",
+Préstamo 120K (4 cuotas),120000,30000,4,0,"December 31, 2025",

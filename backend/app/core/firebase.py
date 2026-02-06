@@ -22,7 +22,30 @@ def initialize_firebase() -> None:
     
     try:
         # Initialize with service account credentials
-        cred = credentials.Certificate(settings.google_application_credentials)
+        import json
+        
+        cred_val = settings.google_application_credentials
+        
+        # Try to parse as JSON string (for Render/Cloud usage)
+        # Try to parse as JSON string (for Render/Cloud usage)
+        # Handle cases where the env var might be wrapped in quotes
+        clean_cred = cred_val.strip()
+        if clean_cred.startswith("'") and clean_cred.endswith("'"):
+            clean_cred = clean_cred[1:-1]
+        elif clean_cred.startswith('"') and clean_cred.endswith('"'):
+            clean_cred = clean_cred[1:-1]
+
+        if clean_cred.startswith('{'):
+            try:
+                cred_dict = json.loads(clean_cred)
+                cred = credentials.Certificate(cred_dict)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode Google Credentials JSON: {e}")
+                raise
+        else:
+            # Assume it's a file path
+            cred = credentials.Certificate(cred_val)
+
         firebase_admin.initialize_app(cred, {
             'projectId': settings.firebase_project_id,
             'storageBucket': settings.firebase_storage_bucket

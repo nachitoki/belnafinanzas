@@ -6,8 +6,8 @@ node_modules/
 **/.env.local
 
 # Data exports / private
-Datos Notion/
-Boletas pruebas/
+# Datos Notion/
+# Boletas pruebas/
 clean_cookies.json
 cookies.txt
 notebook_output.txt

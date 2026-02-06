@@ -1,0 +1,15 @@
+# Fideos
+
+Acumulación ingredientes: https://www.notion.so/24688a385be7800692b8c64dbbbdabb2, https://www.notion.so/24688a385be78041b2b0ffa72e99f14b, https://www.notion.so/24688a385be780cdb6ffd9d5a1a244d7, https://www.notion.so/24688a385be780f98823fd206c41ea46, https://www.notion.so/24688a385be780fdbdd1e424e9ec8eec, https://www.notion.so/24788a385be780eca1e8fea662fc32ed
+Cantidad en Unidad Base Despensa: 1000
+Cantidad necesaria: 600
+Unidad de medida de receta: Gr
+Cantidad necesaria en unidad base: 600
+Costo del ingrediente en la receta: CLP 1,905
+Precio gramo: 3.175
+Precio por unidad de despensa: 1270
+Producto de despensa: Fideos (../Despensa%20Productos%20(Maestra)/Fideos%2024688a385be7800a81eec78ac805a286.md)
+RECETA: Fideos con Bolognesa (../Recetario%20Familiar/Fideos%20con%20Bolognesa%2024788a385be7803a8a9cd4d059e94dd3.md)
+Comprado: No
+Conteo Programados: 3
+gramos programados: 1800

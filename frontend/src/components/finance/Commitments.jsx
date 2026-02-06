@@ -21,6 +21,8 @@ const Commitments = () => {
 
     // Activity State
     const [actionSavingId, setActionSavingId] = useState(null);
+    const [actionPayingId, setActionPayingId] = useState(null);
+    const [payAmount, setPayAmount] = useState('');
 
     // Edit Modal State
     const [editModalOpen, setEditModalOpen] = useState(false);

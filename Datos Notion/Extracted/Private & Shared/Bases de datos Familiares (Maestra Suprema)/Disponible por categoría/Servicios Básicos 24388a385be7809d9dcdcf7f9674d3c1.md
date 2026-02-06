@@ -1,0 +1,9 @@
+# Servicios Básicos
+
+Category: Servicios Básicos
+Disponible: 0
+Gastado: 480631
+Monto proyectado: 149000
+Presupuesto mensual: 629631
+💵 Transacciones familiares (Maestra) 1: Google Veritas (../Transacciones%20familiares%20(Maestra)/Google%20Veritas%2024388a385be78092aa5fca487e1f1c65.md), Joaquín (../Transacciones%20familiares%20(Maestra)/Joaqu%C3%ADn%2024388a385be7802a90ecc5995e5e8a03.md), Teléfonos (../Transacciones%20familiares%20(Maestra)/Tel%C3%A9fonos%2024388a385be780c59407d04e6f463e77.md), Starlink (../Transacciones%20familiares%20(Maestra)/Starlink%2024388a385be780d3965fc30fda578942.md), Gas (../Transacciones%20familiares%20(Maestra)/Gas%2024388a385be7807f98c6d070e6579b15.md), Agua (../Transacciones%20familiares%20(Maestra)/Agua%2024388a385be780038b5fe2b7268fec5f.md), Luz (../Transacciones%20familiares%20(Maestra)/Luz%2024388a385be78090880fe964511cd921.md)
+💵 Transacciones familiares (Maestra) 2: Google Veritas (../Transacciones%20familiares%20(Maestra)/Google%20Veritas%2024388a385be78092aa5fca487e1f1c65.md), Joaquín (../Transacciones%20familiares%20(Maestra)/Joaqu%C3%ADn%2024388a385be7802a90ecc5995e5e8a03.md), Teléfonos (../Transacciones%20familiares%20(Maestra)/Tel%C3%A9fonos%2024388a385be780c59407d04e6f463e77.md), Starlink (../Transacciones%20familiares%20(Maestra)/Starlink%2024388a385be780d3965fc30fda578942.md), Gas (../Transacciones%20familiares%20(Maestra)/Gas%2024388a385be7807f98c6d070e6579b15.md), Agua (../Transacciones%20familiares%20(Maestra)/Agua%2024388a385be780038b5fe2b7268fec5f.md), Luz (../Transacciones%20familiares%20(Maestra)/Luz%2024388a385be78090880fe964511cd921.md)

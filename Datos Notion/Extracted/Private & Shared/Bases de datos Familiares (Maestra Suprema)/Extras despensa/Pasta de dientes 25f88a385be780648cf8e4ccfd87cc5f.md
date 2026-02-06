@@ -1,0 +1,4 @@
+# Pasta de dientes
+
+Costo mensual Comida: Mes actual (../Costo%20mensual%20Comida/Mes%20actual%2024988a385be780f58d26de993365eeac.md)
+Precio compra: CLP 0

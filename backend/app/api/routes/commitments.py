@@ -141,27 +141,23 @@ def update_commitment(
             
             # Recalculate next date
             current_next = data.get("next_date")
+            freq = data.get("frequency", "monthly")
+
             if current_next:
                  try:
                     curr_date = datetime.strptime(current_next, "%Y-%m-%d").date()
-                    freq = data.get("frequency", "monthly")
                     
                     if freq == "monthly":
-                         # Simple month increment
-                         # Handle month overflow
-                         new_month = curr_date.month + 1
-                         new_year = curr_date.year
-                         if new_month > 12:
-                             new_month = 1
-                             new_year += 1
-                         new_date = curr_date.replace(year=new_year, month=new_month)
-                         updates["next_date"] = new_date.isoformat()
+                         updates["next_date"] = _add_months(curr_date, 1).isoformat()
                     elif freq == "weekly":
                          updates["next_date"] = (curr_date + timedelta(days=7)).isoformat()
                     elif freq == "biweekly":
                          updates["next_date"] = (curr_date + timedelta(days=14)).isoformat()
                     elif freq == "yearly":
-                         updates["next_date"] = curr_date.replace(year=curr_date.year + 1).isoformat()
+                         updates["next_date"] = _add_months(curr_date, 12).isoformat()
+                    elif freq == "one_time":
+                         updates["next_date"] = None
+                         updates["status"] = "completed"
                  except Exception:
                      pass
             
@@ -189,17 +185,6 @@ def update_commitment(
             except Exception as e:
                 print(f"Error creating transaction for commitment: {e}")
                 # Don't fail the update if transaction creation fails, but log it
-
-            if frequency == "weekly":
-                updates["next_date"] = (next_date + timedelta(days=7)).isoformat()
-            elif frequency == "biweekly":
-                updates["next_date"] = (next_date + timedelta(days=14)).isoformat()
-            elif frequency == "yearly":
-                updates["next_date"] = _add_months(next_date, 12).isoformat()
-            elif frequency == "one_time":
-                updates["next_date"] = None
-            else:
-                updates["next_date"] = _add_months(next_date, 1).isoformat()
 
         elif action == "postpone":
             postpone_value = payload.get("postpone_days")

@@ -1,0 +1,48 @@
+﻿Producto,Precio compra,Unidad de medida,ENVASE,COMPRA,Precio gramo,QUEDA,Última compra,Recetario Familiar,GRAMOS RECETARIO,Gramos Programados,Gasto programado,¿Ya cocinada?,Recuento de ingredientes,Planificación de comidas,Recetario Familiar 1,Ingredientes programados,Ingredientes de Recetas 1,Rollup,DISPONIBILIDAD,Fórmula
+Nuggets,"CLP 19,500",unidad,20,,975,0,,"@Nuggets ",6,0,CLP 0,,0,,,,,,,0
+Leche sin lactosa,"CLP 1,350",Gr,1000,,1.35,600,,@Leche sin lactosa,600,600,CLP 810,,-600,,,,,,,600
+Mozzarella,"CLP 6,190",Gr,400,,15.475,400,,@Mozzarella,400,400,"CLP 6,190",,-400,,,,,,,400
+Caja Lasagna,"CLP 3,000",Gr,400,,7.5,0,,,0,0,CLP 0,,0,,,,,,,0
+Perejil,CLP 650,unidad,1,,650,1,,@Perejil,1,1,CLP 650,,-1,,,,,,,1
+Maicena,"CLP 7,290",Gr,500,,14.58,50,,@Maicena,50,50,CLP 729,,-50,,,,,,,50
+Zapallo,"CLP 2,890",Gr,2800,,1.032142857143,1000,,"@Zapallo,@Zapallo,@Zapallo",1500,1000,"CLP 1,032",,-1000,,,,,,,1000
+aceite de oliva,"CLP 11,000",Gr,1000,,11,20,,"@aceite de oliva,@aceite de oliva ",35,20,CLP 220,,-20,,,,,,,20
+Mantequilla,"CLP 2,590",Gr,250,,10.36,300,,"@Mantequilla,@Mantequilla,@Mantequilla,@Mantequilla",300,300,"CLP 3,108",,-300,,,,,,,300
+Queso rallado,"CLP 2,130",Gr,80,,26.625,200,,"@Queso rallado,@Queso rallado ,@Queso rallado,@Queso rallado",90,200,"CLP 5,325",,-200,,,,,,,200
+Salsa de tomate,"CLP 4,430",Gr,1200,,3.691666666667,8800,,"Salsa de Tomate,@Salsa de tomate,@Salsa de tomate,@Salsa de tomate ,@Salsa de tomate",4000,8800,"CLP 32,487",,-8800,,,,,,,8800
+Ketchup,"CLP 2,750",,850,,3.235294117647,200,,@Ketchup,200,200,CLP 647,,-200,,,,,,,200
+Mayonesa,"CLP 4,290",Gr,850,,5.047058823529,150,,@Mayonesa,150,150,CLP 757,,-150,,,,,,,150
+Champiñones,CLP 990,Gr,115,,8.608695652174,115,,@Champiñones,115,115,CLP 990,,-115,,,,,,,115
+Tomate,"CLP 1,790",Gr,1000,,1.79,1800,,"@Tomate,@Tomate",1800,1800,"CLP 3,222",,-1800,,,,,,,1800
+Palta,"CLP 3,990",Gr,1000,,3.99,600,,@Palta,600,600,"CLP 2,394",,-600,,,,,,,600
+Tortillas Fajitas,"CLP 2,650",unidad,8,,331.25,16,,@Tortillas Fajitas,16,16,"CLP 5,300",,-16,,,,,,,16
+Ravioles,"CLP 3,650",Gr,400,,9.125,0,,,0,0,CLP 0,,0,,,,,,,0
+Acelga,"CLP 1,590",unidad,1,,1590,4,,"@Acelga,@Acelga",2,4,"CLP 6,360",,-4,,,,,,,4
+Arvejas,"CLP 2,320",Gr,500,,4.64,250,,@Arvejas,250,250,"CLP 1,160",,-250,,,,,,,250
+Garbanzos,"CLP 3,850",Gr,1000,,3.85,0,,@Garbanzos,500,0,CLP 0,,0,,,,,,,0
+Porotos,"CLP 3,890",Gr,1000,,3.89,0,,@Porotos,500,0,CLP 0,,0,,,,,,,0
+Carne entera,"CLP 10,000",Gr,1000,,10,2700,,"@Carne entera,@Carne entera",2700,2700,"CLP 27,000",,-2700,,,,,,,2700
+Brocoli,"CLP 1,690",unidad,1,,1690,1,,"@Brocoli ",0.5,1,"CLP 1,690",,-1,,,,,,,1
+Zapallo Italiano,CLP 790,unidad,1,,790,6,,@Zapallo Italiano,3,6,"CLP 4,740",,-6,,,,,,,6
+Huevos,"CLP 7,690",unidad,30,,256.333333333333,16,,"@Huevos,@Huevos",8,16,"CLP 4,101",,-16,,,,,,,16
+Porotos Verdes,"CLP 1,290",Gr,350,,3.685714285714,550,,"@Porotos Verdes,@Porotos Verdes,@Porotos Verdes",550,550,"CLP 2,027",,-550,,,,,,,550
+Choclo,"CLP 2,190",Gr,500,,4.38,1500,,"@Choclo,@Choclo,@Choclo,@Choclo,@Choclo",1500,1500,"CLP 6,570",,-1500,,,,,,,1500
+Pollo,"CLP 8,000",Gr,1000,,8,3700,,"@Pollo,@Pollo,@Pollo",3200,3700,"CLP 29,600",,-3700,,,,,,,3700
+Bistec,"CLP 12,000",Gr,1000,,12,1200,,@Bistec,1200,1200,"CLP 14,400",,-1200,,,,,,,1200
+Papas,"CLP 12,000",Gr,25000,,0.48,9100,,"@Papas,@Papas,@Papas,@Papas,@Papas,@Papas,@Papas",8100,9100,"CLP 4,368",,-9100,,,,,,,9100
+Jamón,"CLP 2,000",Gr,1000,,2,1200,,"@Jamón,@Jamón (1)",300,1200,"CLP 2,400",,-1200,,,,,,,1200
+Crema sin lactosa,"CLP 7,150",Gr,1000,,7.15,2400,,"@Crema sin lactosa,@Crema sin lactosa,@Crema sin lactosa,@Crema sin lactosa,@Crema sin lactosa",1050,2400,"CLP 17,160",,-2400,,,,,,,2400
+Fideos sin Gluten,"CLP 3,850",Gr,400,,9.625,1120,,"Fideos sin Gluten,@Fideos sin Gluten ",280,1120,"CLP 10,780",,-1120,,,,,,,1120
+Fideos,"CLP 1,270",Gr,400,,3.175,4200,,"Fideos,@Fideos,@Fideos",1350,4200,"CLP 13,335",,-4200,,,,,,,4200
+Carne molida,"CLP 10,000",Gr,1000,,10,9000,,"Carne Molida,Carne Molida,@Carne molida,@Carne molida,@Carne molida,@Carne molida",5000,9000,"CLP 90,000",,-9000,,,,,,,9000
+Arroz,"CLP 2,530",Gr,1000,,2.53,1450,,"Arroz,@Arroz,@Arroz,@Arroz,@Arroz,@Arroz,@Arroz ",1550,1450,"CLP 3,669",,-1450,,,,,,,1450
+Pimentón,"CLP 1,790",unidad,1,,1790,2,,"Pimentón,@Pimentón,@Pimentón,@Pimentón,@Pimentón,@Pimentón,@Pimentón",3.5,2,"CLP 3,580",,-2,,,,,,,2
+Caldo,"CLP 1,280",Gr,80,,16,5,,"Caldo,@Caldo",9,5,CLP 80,,-5,,,,,,,5
+Longanizas,"CLP 3,850",Gr,280,,13.75,0,,Longanizas,140,0,CLP 0,,0,,,,,,,0
+Cebolla,"CLP 1,990",Gr,1000,,1.99,2500,,"Cebolla,Cebolla,Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla,@Cebolla",2250,2500,"CLP 4,975",,-2500,,,,,,,2500
+Zanahoria,"CLP 1,290",Gr,1000,,1.29,2000,,"Zanahoria,Zanahoria,Zanahoria,@Zanahoria,@Zanahoria,@Zanahoria,@Zanahoria,@Zanahoria,@Zanahoria,@Zanahoria",1650,2000,"CLP 2,580",,-2000,,,,,,,2000
+Lentejas,"CLP 3,650",Gr,1000,,3.65,0,,Lentejas,500,0,CLP 0,,0,,,,,,,0
+Miel,"CLP 7,500",Gr,1000,,7.5,0,,Miel,15,0,CLP 0,,0,,,,,,,0
+Levadura fresca,"CLP 5,500",Gr,1000,,5.5,930,,Levadura Fresca,30,930,"CLP 5,115",,-930,,,,,,,930
+Sal,CLP 800,Gr,2500,,0.32,740,,"Sal,Sal,Sal,Sal,@Sal,@Sal",90,740,CLP 237,,-740,,,,,,,740
+Harina 0000,"CLP 26,500",Gr,25000,,1.06,31075,,"Harina,@Harina 0000",1075,31075,"CLP 32,940",,-31075,,,,,,,31075
