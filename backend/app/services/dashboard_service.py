@@ -96,9 +96,31 @@ class DashboardService:
                     cat_id = data.get('category_id')
                     cat_data = cat_map.get(cat_id, {}) if cat_id else {}
                     cat_name = (cat_data.get('name') or "").lower()
-                    if "ahorro" in cat_name or "deuda" in cat_name or "inversion" in cat_name:
+                    
+                    # Smart Classification Logic
+                    desc = (data.get('description') or "").lower()
+                    store = (data.get('store_id') or "").lower() # store_id might not be readable, but check just in case
+                    
+                    # Keywords for Oxigeno (Essential)
+                    # Utilities, Supermarkets, Health, Education, Telecom
+                    oxigeno_keywords = [
+                        "supermercado", "jumbo", "lider", "unimarc", "santa isabel", "tottus", "acunta", "mayorista",
+                        "cge", "enel", "aguas", "esval", "essbio", "metrogas", "lipigas", "abastible",
+                        "wom", "entel", "movistar", "btub", "vtr", "claro", "mundo",
+                        "farmacia", "cruz verde", "ahumada", "salcobrand", "doctor", "medico", "salud", "clinica",
+                        "colegio", "jardin", "educacion", "universidad",
+                        "arriendo", "gc", "gasto comun", "contribucion"
+                    ]
+                    
+                    # Keywords for Blindaje (Savings/Debt)
+                    blindaje_keywords = ["ahorro", "inversion", "fintual", "racional", "coopeuch", "deposito", "deuda", "credito", "hipotecario"]
+                    
+                    is_blindaje = "ahorro" in cat_name or "deuda" in cat_name or "inversion" in cat_name or any(k in desc for k in blindaje_keywords)
+                    is_oxigeno = cat_data.get('essential', False) or any(k in desc for k in oxigeno_keywords) or any(k in cat_name for k in oxigeno_keywords)
+                    
+                    if is_blindaje:
                         real_blindaje += val
-                    elif cat_data.get('essential', False):
+                    elif is_oxigeno:
                         real_oxigeno += val
                     else:
                         real_vida += val
