@@ -226,8 +226,9 @@ export const getHorizon = async () => {
     return response.data;
 };
 
-export const getRecipes = async () => {
+export const getRecipes = async (limit = 200) => {
     const response = await axios.get(`${API_URL}/recipes`, {
+        params: { limit },
         timeout: REQUEST_TIMEOUT_MS,
     });
     return response.data;
@@ -347,3 +348,5 @@ export const simulateBitacoraIdea = async (payload) => {
     });
     return response.data;
 };
+
+
