@@ -354,7 +354,7 @@ export const simulateBitacoraIdea = async (payload) => {
 
 export const updateDashboardSettings = async (settings) => {
     try {
-        const response = await axios.put(${API_URL}/dashboard/settings, settings, {
+        const response = await axios.put(`${API_URL}/dashboard/settings`, settings, {
             timeout: REQUEST_TIMEOUT_MS,
         });
         return response.data;
