@@ -261,10 +261,11 @@ const MealCalendar = () => {
         } catch (e) { console.error(e); }
     };
 
-    const calculateTotal = () => {
+    const calculateTotal = (mode = viewMode) => {
         let total = 0;
         let keys = [];
-        if (viewMode === 'week') {
+
+        if (mode === 'week') {
             const { days } = getWeekRange();
             keys = days.map(d => `${d}_lunch`);
         } else {
@@ -275,7 +276,8 @@ const MealCalendar = () => {
         keys.forEach(k => {
             const name = calendarData[k];
             if (name) {
-                const r = recipes.find(rec => rec.name === name);
+                // Try exact match first, then case-insensitive
+                const r = recipes.find(rec => rec.name === name || rec.name.toLowerCase() === name.toLowerCase());
                 if (r && r.cost) total += parseInt(r.cost);
             }
         });
@@ -463,13 +465,23 @@ const MealCalendar = () => {
             </div>
 
             {/* Total Indicator */}
+            {/* Total Indicator */}
             <div style={{
-                background: 'var(--status-green-transparent)', padding: '10px 16px', borderRadius: '12px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                color: 'var(--status-green-dark)', marginBottom: '10px'
+                background: 'var(--status-green-transparent)', padding: '12px 16px', borderRadius: '12px',
+                marginBottom: '10px', border: '1px solid var(--status-green-main)'
             }}>
-                <span style={{ fontWeight: '600' }}>Total {viewMode === 'week' ? 'Semana' : 'Mes'}:</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: '800' }}>${calculateTotal().toLocaleString('es-CL')}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontWeight: '600', fontSize: '0.9rem', color: '#166534' }}>Total Semana:</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#166534' }}>
+                        ${calculateTotal('week').toLocaleString('es-CL')}
+                    </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '500', fontSize: '0.9rem', color: '#15803d' }}>Total Mes:</span>
+                    <span style={{ fontSize: '1.0rem', fontWeight: '700', color: '#15803d' }}>
+                        ${calculateTotal('month').toLocaleString('es-CL')}
+                    </span>
+                </div>
             </div>
 
             {/* Action Bar */}

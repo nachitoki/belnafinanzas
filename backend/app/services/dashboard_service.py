@@ -79,8 +79,13 @@ class DashboardService:
             all_transactions_data.append(data)
             
             if (now - occurred_on).days <= 30:
+                try:
+                    amt = float(data.get('amount', 0))
+                except:
+                    amt = 0.0
+                    
                 transactions_objects.append(Transaction(
-                    amount=float(data.get('amount', 0)),
+                    amount=amt,
                     date=occurred_on,
                     category=data.get('category_id', 'unknown'),
                     store_id=data.get('store_id'),
@@ -97,9 +102,13 @@ class DashboardService:
                     
                     # Smart Classification Logic
                     desc = (data.get('description') or "").lower()
-                    store = (data.get('store_id') or "").lower() # store_id might not be readable, but check just in case
+                    store = (data.get('store_id') or "").lower() 
                     
-                    # Keywords for Oxigeno (Essential)
+                    def safe_float(v):
+                        try: return float(v)
+                        except: return 0.0
+
+                    val = abs(safe_float(data.get('amount')))
                     # Utilities, Supermarkets, Health, Education, Telecom
                     oxigeno_keywords = [
                         "supermercado", "jumbo", "lider", "unimarc", "santa isabel", "tottus", "acunta", "mayorista",
