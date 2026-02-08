@@ -50,10 +50,59 @@ const Dashboard = () => {
         }
     }, []);
 
-    // ... (rest of useEffects) ...
+    useEffect(() => {
+        fetchData();
+
+        // Load Project logic
+        const loadProject = async () => {
+            setProjectLoading(true);
+            try {
+                const data = await getBitacora();
+                const projects = Array.isArray(data)
+                    ? data.filter((entry) => String(entry.kind || '').toLowerCase() === 'project')
+                    : [];
+                if (projects.length > 0) {
+                    projects.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                    setProjectEntry(projects[0]);
+                } else {
+                    setProjectEntry(null);
+                }
+            } catch (e) {
+                console.error('Error loading projects', e);
+                setProjectEntry(null);
+            } finally {
+                setProjectLoading(false);
+            }
+        };
+        loadProject();
+    }, [fetchData]);
+
+    // Scroll to tab logic
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const tab = params.get('tab');
+        const map = {
+            estado: statusRef,
+            horizonte: horizonRef,
+            mes: monthRef,
+            notificaciones: alertsRef,
+            proyecto: projectRef
+        };
+        const targetRef = map[tab];
+        if (targetRef && targetRef.current) {
+            targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [location.search]);
+
+    const containerStyle = {
+        padding: '20px 20px 100px',
+        maxWidth: '480px',
+        margin: '0 auto',
+        minHeight: 'calc(100vh - var(--topbar-height, 72px) - var(--bottomnav-height, 96px))',
+        position: 'relative'
+    };
 
     if (loading) {
-        // ... (skeleton code) ...
         return (
             <div style={{ padding: '20px' }}>
                 <div className="skeleton" style={{ height: '180px', marginBottom: '20px' }} />
