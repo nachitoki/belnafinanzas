@@ -56,19 +56,19 @@ def list_commitments(
                 m_data = m.to_dict()
                 meals_total += int(m_data.get("recipe_cost") or 0)
                 
-            if meals_total > 0:
-                results.append({
-                    "id": "synthetic_meals",
-                    "name": "Almuerzos Planificados",
-                    "amount": meals_total,
-                    "frequency": "monthly",
-                    "flow_category": "structural",
-                    "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
-                    "installments_total": 0,
-                    "installments_paid": 0,
-                    "last_paid_at": None,
-                    "created_at": now.isoformat()
-                })
+            # Always append synthetic meal commitment to verify visibility, even if 0
+            results.append({
+                "id": "synthetic_meals",
+                "name": "Almuerzos Planificados",
+                "amount": meals_total,
+                "frequency": "monthly",
+                "flow_category": "structural",
+                "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
+                "installments_total": 0,
+                "installments_paid": 0,
+                "last_paid_at": None,
+                "created_at": now.isoformat()
+            })
         except Exception as e:
             print(f"Error calculating synthetic meals: {e}")
 

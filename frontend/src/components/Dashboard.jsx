@@ -137,6 +137,21 @@ const Dashboard = () => {
             </div>
 
             {/* Components in order */}
+            {/* Pending Commitments Alert */}
+            {pending_commitments_amount > 0 && (
+                <div className="spending-card" style={{ marginBottom: '16px', borderLeft: '4px solid var(--status-red-main)' }} onClick={() => navigate('/flujo?tab=distribucion')}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <div style={{ fontWeight: '700', color: 'var(--status-red-main)' }}>Por pagar este mes</div>
+                            <div style={{ fontSize: '0.8rem', color: '#666' }}>Compromisos pendientes</div>
+                        </div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--status-red-main)' }}>
+                            ${Math.round(pending_commitments_amount).toLocaleString('es-CL')}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div ref={monthRef}>
                 <div className="spending-card" style={{ marginBottom: '14px' }}>
                     <div className="section-title">Mes</div>

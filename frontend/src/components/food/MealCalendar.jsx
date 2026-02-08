@@ -152,43 +152,186 @@ const MealCalendar = () => {
         }));
     };
 
+    // Template State
+    const [templates, setTemplates] = useState([]);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [templateName, setTemplateName] = useState('');
+
+    useEffect(() => {
+        const saved = localStorage.getItem('meal_plan_templates');
+        if (saved) {
+            try { setTemplates(JSON.parse(saved)); } catch (e) { }
+        }
+    }, []);
+
+    const saveTemplate = () => {
+        if (!templateName) return;
+        // Get current week's data from memory (calendarData)
+        // We find all items within the current week range
+        const { start, end, days } = getWeekRange();
+        const items = {};
+        days.forEach(d => {
+            const key = `${d}_lunch`;
+            if (calendarData[key]) items[key] = calendarData[key];
+        });
+
+        // Store as relative offsets? Or just raw data? 
+        // Better: store as array of { dayOffset: 0..6, recipeName }
+        const templateItems = days.map((d, idx) => ({
+            dayOffset: idx,
+            recipeName: calendarData[`${d}_lunch`] || null
+        })).filter(x => x.recipeName);
+
+        const newTmpl = { name: templateName, items: templateItems };
+        const newTemplates = [...templates, newTmpl];
+        setTemplates(newTemplates);
+        localStorage.setItem('meal_plan_templates', JSON.stringify(newTemplates));
+        setTemplateName('');
+        setShowTemplateModal(false);
+        alert('Plantilla guardada');
+    };
+
+    const loadTemplate = (tmpl) => {
+        if (!confirm(`¿Cargar plantilla "${tmpl.name}"? Reemplazará la semana actual.`)) return;
+        const { start, days } = getWeekRange();
+        const map = { ...calendarData }; // copy existing
+
+        // Clear current week first? Or overwrite? Overwrite is safer.
+        days.forEach(d => delete map[`${d}_lunch`]); // clear
+
+        tmpl.items.forEach(item => {
+            const date = days[item.dayOffset];
+            if (date) {
+                map[`${date}_lunch`] = item.recipeName;
+            }
+        });
+        setCalendarData(map);
+        setShowTemplateModal(false);
+    };
+
+    const copyPreviousWeek = async () => {
+        if (!confirm('¿Copiar la semana anterior a esta?')) return;
+        // Calculate prev week range
+        const d = new Date(currentDate);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const currentMonday = new Date(d.setDate(diff));
+
+        const prevMonday = new Date(currentMonday);
+        prevMonday.setDate(currentMonday.getDate() - 7);
+        const prevSunday = new Date(prevMonday);
+        prevSunday.setDate(prevMonday.getDate() + 6);
+
+        try {
+            const prevData = await getMeals(prevMonday.toISOString().split('T')[0], prevSunday.toISOString().split('T')[0]);
+            if (prevData && prevData.length > 0) {
+                const map = { ...calendarData };
+                // Map prev dates to current dates
+                // We rely on order or day index
+                // Let's iterate 0..6
+                for (let i = 0; i < 7; i++) {
+                    const pDay = new Date(prevMonday); pDay.setDate(prevMonday.getDate() + i);
+                    const pStr = formatDate(pDay);
+                    const cDay = new Date(currentMonday); cDay.setDate(currentMonday.getDate() + i);
+                    const cStr = formatDate(cDay);
+
+                    // Find meal for pStr
+                    const meal = prevData.find(m => m.date === pStr && m.type === 'lunch');
+                    if (meal) {
+                        map[`${cStr}_lunch`] = meal.recipe_name;
+                    }
+                }
+                setCalendarData(map);
+            } else {
+                alert('No hay datos en la semana anterior');
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const calculateTotal = () => {
+        let total = 0;
+        let keys = [];
+        if (viewMode === 'week') {
+            const { days } = getWeekRange();
+            keys = days.map(d => `${d}_lunch`);
+        } else {
+            const days = getMonthDays().filter(d => d);
+            keys = days.map(d => `${d}_lunch`);
+        }
+
+        keys.forEach(k => {
+            const name = calendarData[k];
+            if (name) {
+                const r = recipes.find(rec => rec.name === name);
+                if (r && r.cost) total += parseInt(r.cost);
+            }
+        });
+        return total;
+    };
+
+    // --- UI Renders ---
+
     const renderHeader = () => (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                    onClick={() => navigate('/')}
-                    style={{ background: 'transparent', fontSize: '1.2rem', padding: '0', border: 'none', cursor: 'pointer' }}
-                >
-                    {'\u2190'}
-                </button>
-                <div>
-                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Calendario</h2>
-                    <div className="page-subtitle">Planificador de comidas</div>
+        <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                        onClick={() => navigate('/')}
+                        style={{ background: 'transparent', fontSize: '1.2rem', padding: '0', border: 'none', cursor: 'pointer' }}
+                    >
+                        {'\u2190'}
+                    </button>
+                    <div>
+                        <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Calendario</h2>
+                        <div className="page-subtitle">Planificador de comidas</div>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                        onClick={() => setViewMode('week')}
+                        style={{
+                            padding: '6px 12px', borderRadius: '20px', border: 'none',
+                            background: viewMode === 'week' ? 'var(--status-green-main)' : '#f0f0f0',
+                            color: viewMode === 'week' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
+                        }}
+                    >
+                        Semana
+                    </button>
+                    <button
+                        onClick={() => setViewMode('month')}
+                        style={{
+                            padding: '6px 12px', borderRadius: '20px', border: 'none',
+                            background: viewMode === 'month' ? 'var(--status-green-main)' : '#f0f0f0',
+                            color: viewMode === 'month' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
+                        }}
+                    >
+                        Mes
+                    </button>
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                    onClick={() => setViewMode('week')}
-                    style={{
-                        padding: '6px 12px', borderRadius: '20px', border: 'none',
-                        background: viewMode === 'week' ? 'var(--status-green-main)' : '#f0f0f0',
-                        color: viewMode === 'week' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
-                    }}
-                >
-                    Semana
-                </button>
-                <button
-                    onClick={() => setViewMode('month')}
-                    style={{
-                        padding: '6px 12px', borderRadius: '20px', border: 'none',
-                        background: viewMode === 'month' ? 'var(--status-green-main)' : '#f0f0f0',
-                        color: viewMode === 'month' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
-                    }}
-                >
-                    Mes
-                </button>
+            {/* Total Indicator */}
+            <div style={{
+                background: 'var(--status-green-transparent)', padding: '10px 16px', borderRadius: '12px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                color: 'var(--status-green-dark)'
+            }}>
+                <span style={{ fontWeight: '600' }}>Total {viewMode === 'week' ? 'Semana' : 'Mes'}:</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: '800' }}>${calculateTotal().toLocaleString('es-CL')}</span>
             </div>
+
+            {/* Week Actions */}
+            {viewMode === 'week' && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
+                    <button onClick={copyPreviousWeek} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '6px 10px', background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                        Copiar Anterior
+                    </button>
+                    <button onClick={() => setShowTemplateModal(true)} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '6px 10px', background: '#f3e8ff', color: '#7e22ce', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                        Plantillas
+                    </button>
+                </div>
+            )}
         </div>
     );
 
@@ -407,6 +550,64 @@ const MealCalendar = () => {
         );
     };
 
+    const renderTemplateModal = () => {
+        if (!showTemplateModal) return null;
+        return (
+            <div style={{
+                position: 'fixed', inset: 0, zIndex: 1100,
+                background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+                <div style={{ background: 'white', width: '90%', maxWidth: '400px', borderRadius: '12px', padding: '20px' }}>
+                    <h3 style={{ marginTop: 0 }}>Gestión de Plantillas</h3>
+
+                    <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontWeight: '600', marginBottom: '4px' }}>Guardar semana actual</div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                value={templateName}
+                                onChange={(e) => setTemplateName(e.target.value)}
+                                placeholder="Nombre (ej: Semana Barata)"
+                                style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                            />
+                            <button onClick={saveTemplate} style={{ padding: '8px 12px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                                Guardar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        <div style={{ fontWeight: '600', marginBottom: '4px' }}>Cargar plantilla</div>
+                        {templates.length === 0 && <div style={{ color: '#888', fontStyle: 'italic' }}>No hay plantillas guardadas.</div>}
+                        {templates.map((t, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', borderBottom: '1px solid #eee' }}>
+                                <span>{t.name}</span>
+                                <div>
+                                    <button onClick={() => loadTemplate(t)} style={{ padding: '4px 8px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '4px' }}>
+                                        Cargar
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const newT = templates.filter((_, i) => i !== idx);
+                                            setTemplates(newT);
+                                            localStorage.setItem('meal_plan_templates', JSON.stringify(newT));
+                                        }}
+                                        style={{ padding: '4px 8px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <button onClick={() => setShowTemplateModal(false)} style={{ marginTop: '16px', width: '100%', padding: '10px', background: '#f5f5f5', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div style={{ padding: '20px', maxWidth: '480px', margin: '0 auto', minHeight: '100vh', paddingBottom: '100px' }}>
             {renderHeader()}
@@ -434,6 +635,7 @@ const MealCalendar = () => {
                 </button>
             </div>
             {renderPicker()}
+            {renderTemplateModal()}
         </div>
     );
 };
