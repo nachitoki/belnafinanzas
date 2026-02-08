@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { getCommitments, createCommitment, updateCommitment, deleteCommitment } from '../../services/api';
 import PillTabs from '../layout/PillTabs';
+import CommitmentChart from './CommitmentChart';
 
 const Commitments = () => {
     const navigate = useNavigate();
@@ -23,6 +24,9 @@ const Commitments = () => {
     const [actionSavingId, setActionSavingId] = useState(null);
     const [actionPayingId, setActionPayingId] = useState(null);
     const [payAmount, setPayAmount] = useState('');
+
+    // Chart Filter State
+    const [selectedCategory, setSelectedCategory] = useState(null);
 
     // Edit Modal State
     const [editModalOpen, setEditModalOpen] = useState(false);
@@ -314,7 +318,18 @@ const Commitments = () => {
                 </button>
             </div>
 
-            <h3 className="section-title" style={{ textAlign: 'center', marginTop: '20px' }}>COMPROMISOS REGISTRADOS</h3>
+            {/* CHART */}
+            {!loading && commitments.length > 0 && (
+                <CommitmentChart
+                    commitments={commitments}
+                    onFilterChange={setSelectedCategory}
+                    selectedCategory={selectedCategory}
+                />
+            )}
+
+            <h3 className="section-title" style={{ textAlign: 'center', marginTop: '10px' }}>
+                {selectedCategory ? `DETALLE: ${selectedCategory.toUpperCase()}` : 'TODOS LOS COMPROMISOS'}
+            </h3>
 
             {/* Groups Rendering */}
             {loading ? (
@@ -330,8 +345,8 @@ const Commitments = () => {
                         if (name.includes('colegio') || name.includes('jardin') || name.includes('universidad') || name.includes('matricula')) return 'Educación';
                         if (name.includes('auto') || name.includes('bencina') || name.includes('tag') || name.includes('seguro auto') || name.includes('permiso') || name.includes('patente')) return 'Transporte';
                         if (name.includes('isapre') || name.includes('seguro vida') || name.includes('medico') || name.includes('farmacia') || name.includes('doctor')) return 'Salud';
-                        if (name.includes('credito') || name.includes('prestamo') || name.includes('visa') || name.includes('mastercard') || name.includes('banco') || name.includes('cuota')) return 'Deudas / Financiero';
-                        if (name.includes('super') || name.includes('jumbo') || name.includes('lider') || name.includes('unimarc') || name.includes('pan') || name.includes('fruta') || name.includes('feria') || name.includes('almuerzo') || name.includes('compra')) return 'Alimentación / Super';
+                        if (name.includes('credito') || name.includes('prestamo') || name.includes('visa') || name.includes('mastercard') || name.includes('banco') || name.includes('cuota')) return 'Deudas';
+                        if (name.includes('super') || name.includes('jumbo') || name.includes('lider') || name.includes('unimarc') || name.includes('pan') || name.includes('fruta') || name.includes('feria') || name.includes('almuerzo') || name.includes('compra')) return 'Alimentación';
                         return 'Otros';
                     };
 
@@ -342,7 +357,11 @@ const Commitments = () => {
                         return acc;
                     }, {});
 
-                    const groupOrder = ['Hogar', 'Alimentación / Super', 'Educación', 'Salud', 'Transporte', 'Deudas / Financiero', 'Otros'];
+                    // Filter Logic: If selectedCategory is set, only show that group.
+                    // If not, use defined order.
+                    const groupOrder = selectedCategory
+                        ? [selectedCategory]
+                        : ['Hogar', 'Alimentación', 'Educación', 'Salud', 'Transporte', 'Deudas', 'Otros'];
 
                     return groupOrder.map(groupName => {
                         const items = groups[groupName] || [];
@@ -352,14 +371,17 @@ const Commitments = () => {
 
                         return (
                             <div key={groupName} style={{ marginBottom: '20px' }}>
-                                <div style={{
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                    background: 'var(--bg-card)', padding: '10px 14px', borderRadius: '12px',
-                                    border: '1px solid var(--border-light)', marginBottom: '8px'
-                                }}>
-                                    <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--color-text-main)' }}>{groupName}</h3>
-                                    <span style={{ fontWeight: '700', color: 'var(--color-text-dim)' }}>${totalGroup.toLocaleString('es-CL')}</span>
-                                </div>
+                                {/* Hide header if single category selected (title already says it) */}
+                                {!selectedCategory && (
+                                    <div style={{
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        background: 'var(--bg-card)', padding: '10px 14px', borderRadius: '12px',
+                                        border: '1px solid var(--border-light)', marginBottom: '8px'
+                                    }}>
+                                        <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--color-text-main)' }}>{groupName}</h3>
+                                        <span style={{ fontWeight: '700', color: 'var(--color-text-dim)' }}>${totalGroup.toLocaleString('es-CL')}</span>
+                                    </div>
+                                )}
 
                                 {items.map(c => (
                                     <div key={c.id} className="spending-card" style={{ marginBottom: '8px', borderLeft: '4px solid #E2E8F0' }}>
