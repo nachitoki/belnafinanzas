@@ -108,7 +108,7 @@ const MealCalendar = () => {
                     type,
                     recipe_name: name || "", // Sanitize null/undefined to empty string
                     recipe_id: null,
-                    recipe_cost: r ? (r.cost || 0) : 0
+                    recipe_cost: r ? Math.round(r.cost || 0) : 0
                 };
             });
 
