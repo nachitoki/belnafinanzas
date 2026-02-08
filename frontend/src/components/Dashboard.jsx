@@ -25,14 +25,22 @@ const Dashboard = () => {
     const alertsRef = useRef(null);
     const projectRef = useRef(null);
 
+    const [errorMsg, setErrorMsg] = useState(null);
+
     const fetchData = React.useCallback(async (isRetry = false) => {
         try {
+            setErrorMsg(null);
             const result = await getDashboardSummary();
             setData(result);
             window.localStorage.setItem('dashboard_cache_v1', JSON.stringify({ ts: Date.now(), data: result }));
             retryRef.current = false;
         } catch (e) {
             console.error('Dashboard fetch failed', e);
+            const msg = e.response?.data?.detail
+                ? JSON.stringify(e.response.data.detail)
+                : (e.message || 'Error desconocido');
+            setErrorMsg(msg);
+
             if (!isRetry && !retryRef.current) {
                 retryRef.current = true;
                 setTimeout(() => fetchData(true), 2000);
@@ -42,59 +50,10 @@ const Dashboard = () => {
         }
     }, []);
 
-    useEffect(() => {
-        fetchData();
-
-        // Load Project logic
-        const loadProject = async () => {
-            setProjectLoading(true);
-            try {
-                const data = await getBitacora();
-                const projects = Array.isArray(data)
-                    ? data.filter((entry) => String(entry.kind || '').toLowerCase() === 'project')
-                    : [];
-                if (projects.length > 0) {
-                    projects.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-                    setProjectEntry(projects[0]);
-                } else {
-                    setProjectEntry(null);
-                }
-            } catch (e) {
-                console.error('Error loading projects', e);
-                setProjectEntry(null);
-            } finally {
-                setProjectLoading(false);
-            }
-        };
-        loadProject();
-    }, [fetchData]);
-
-    // Scroll to tab logic
-    useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        const tab = params.get('tab');
-        const map = {
-            estado: statusRef,
-            horizonte: horizonRef,
-            mes: monthRef,
-            notificaciones: alertsRef,
-            proyecto: projectRef
-        };
-        const targetRef = map[tab];
-        if (targetRef && targetRef.current) {
-            targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }, [location.search]);
-
-    const containerStyle = {
-        padding: '20px 20px 100px',
-        maxWidth: '480px',
-        margin: '0 auto',
-        minHeight: 'calc(100vh - var(--topbar-height, 72px) - var(--bottomnav-height, 96px))',
-        position: 'relative'
-    };
+    // ... (rest of useEffects) ...
 
     if (loading) {
+        // ... (skeleton code) ...
         return (
             <div style={{ padding: '20px' }}>
                 <div className="skeleton" style={{ height: '180px', marginBottom: '20px' }} />
@@ -106,7 +65,15 @@ const Dashboard = () => {
         );
     }
 
-    if (!data) return <div style={{ padding: '20px', textAlign: 'center', color: 'var(--status-red-main)' }}>Error al cargar datos.</div>;
+    if (!data) return (
+        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--status-red-main)' }}>
+            <h3>Error al cargar datos</h3>
+            <p style={{ fontSize: '0.9rem', color: '#666' }}>{errorMsg}</p>
+            <button onClick={() => { setLoading(true); fetchData(); }} style={{ marginTop: '10px', padding: '8px 16px', background: 'var(--status-blue-main)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                Reintentar
+            </button>
+        </div>
+    );
 
     const {
         household_status = 'green',

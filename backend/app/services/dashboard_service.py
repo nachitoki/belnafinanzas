@@ -73,7 +73,11 @@ class DashboardService:
                 try:
                     occurred_on = datetime.fromisoformat(occurred_on)
                 except:
+                    # Fallback for safe date
                     occurred_on = datetime.utcnow()
+            else:
+                 # Fallback if None or other type
+                 occurred_on = datetime.utcnow()
             
             data['parsed_date'] = occurred_on
             all_transactions_data.append(data)

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
-const REQUEST_TIMEOUT_MS = 60000;
+const REQUEST_TIMEOUT_MS = 300000; // 5 minutes to handle Render Cold Starts
 
 const buildFallbackBase = () => {
     if (API_URL.endsWith('/api')) {
