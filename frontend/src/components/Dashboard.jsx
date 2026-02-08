@@ -115,7 +115,8 @@ const Dashboard = () => {
         spending_zone = { status: 'green', label: 'Cargando...' },
         month_overview = {},
         distribution_real = {},
-        food_budget = null
+        food_budget = null,
+        pending_commitments_amount = 0
     } = data || {};
 
     return (
