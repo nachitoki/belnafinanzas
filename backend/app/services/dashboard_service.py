@@ -10,9 +10,7 @@ from app.domain.logic import (
     household_message
 )
 
-_CACHE = {"ts": None, "data": None}
-_CACHE_TTL_SECONDS = 120
-
+_CACHE = {}
 
 class DashboardService:
     def __init__(self, db: Client):
@@ -20,10 +18,10 @@ class DashboardService:
 
     def get_dashboard_summary(self, household_id: str) -> Dict[str, Any]:
         now = datetime.utcnow()
-        if _CACHE["ts"] and _CACHE["data"]:
-            # Serve cache immediately if fresh; allow stale cache to avoid blocking UX
-            if (now - _CACHE["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
-                return _CACHE["data"]
+        cached = _CACHE.get(household_id)
+        if cached and cached.get("ts") and cached.get("data"):
+            if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
+                return cached["data"]
 
         # 1. Fetch Collections Concurrent-ish (limit 300 each)
         # We fetch all core collections once to avoid N queries
@@ -271,6 +269,24 @@ class DashboardService:
                      if any(k in cat_name for k in food_keywords):
                          food_spent += abs(amount)
 
+        
+        # Calculate Pending Commitments Amount
+        pending_commitments_amount = 0.0
+        current_month_str = now.strftime("%Y-%m")
+        for c in commitments:
+            # Check if paid this month
+            last_paid = c.get("last_paid_at")
+            is_paid = False
+            if last_paid:
+                try:
+                    lp_date = datetime.fromisoformat(str(last_paid))
+                    if lp_date.strftime("%Y-%m") == current_month_str:
+                        is_paid = True
+                except: pass
+            
+            if not is_paid:
+                pending_commitments_amount += float(c.get("amount", 0) or 0)
+
         result = {
             "household_status": household_status.value,
             "status_message": status_msg,
@@ -278,6 +294,7 @@ class DashboardService:
             "spending_zone": { "status": spending_status.value, "label": spending_label },
             "month_overview": month_overview,
             "distribution_real": dist_result,
+            "pending_commitments_amount": round(pending_commitments_amount),
             "food_budget": {
                 "limit": food_budget_limit,
                 "spent": food_spent,
@@ -285,8 +302,7 @@ class DashboardService:
                 "progress": min(100, round((food_spent / food_budget_limit) * 100)) if food_budget_limit > 0 else 0
             }
         }
-        _CACHE["ts"] = now
-        _CACHE["data"] = result
+        _CACHE[household_id] = {"ts": now, "data": result}
         return result
 
     def update_settings(self, household_id: str, updates: Dict[str, Any]) -> None:
@@ -300,7 +316,7 @@ class DashboardService:
             
         ref.update(update_dict)
         # Invalidate cache
-        _CACHE["ts"] = None
+        _CACHE.pop(household_id, None)
 
     def _compute_month_overview_memory(self, incomes, commitments, events, household_id, now, months_ahead=3):
         month_start = datetime(now.year, now.month, 1)

@@ -42,6 +42,36 @@ def list_commitments(
                 "last_paid_at": data.get("last_paid_at"),
                 "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
             })
+        
+        # Synthetic Commitment: Almuerzos Planificados
+        try:
+            start_of_month = datetime(now.year, now.month, 1).strftime("%Y-%m-%d")
+            meal_docs = db.collection("households").document(household_id)\
+                .collection("meal_plans")\
+                .where("date", ">=", start_of_month)\
+                .stream()
+                
+            meals_total = 0
+            for m in meal_docs:
+                m_data = m.to_dict()
+                meals_total += int(m_data.get("recipe_cost") or 0)
+                
+            if meals_total > 0:
+                results.append({
+                    "id": "synthetic_meals",
+                    "name": "Almuerzos Planificados",
+                    "amount": meals_total,
+                    "frequency": "monthly",
+                    "flow_category": "structural",
+                    "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
+                    "installments_total": 0,
+                    "installments_paid": 0,
+                    "last_paid_at": None,
+                    "created_at": now.isoformat()
+                })
+        except Exception as e:
+            print(f"Error calculating synthetic meals: {e}")
+
         _CACHE[household_id] = {"ts": now, "data": results}
         return results
     except Exception as e:

@@ -269,6 +269,10 @@ const Incomes = () => {
             oxigeno: distributionReal.oxigeno || 0,
             vida: distributionReal.vida || 0,
             blindaje: distributionReal.blindaje || 0,
+            oxigeno: distributionReal.oxigeno || 0,
+            vida: distributionReal.vida || 0,
+            blindaje: distributionReal.blindaje || 0,
+            pending: distributionReal.pending_commitments_amount || 0,
             projects: projectImpact.total || 0
         });
         const cacheKey = 'ai_savings_cache_v1';
@@ -387,6 +391,20 @@ const Incomes = () => {
                             {savingsLoading
                                 ? 'IA: generando recomendación...'
                                 : (savingsMessage ? `IA: ${savingsMessage}` : 'IA: mensaje no disponible.')}
+                        </div>
+                    </div>
+
+                    {/* Pending Commitments Card */}
+                    <div className="spending-card" style={{ marginTop: '12px', borderLeft: '4px solid var(--status-red-main)' }}>
+                        <div className="section-title">Por pagar (Mes actual)</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '6px' }}>
+                            Compromisos con fecha de vencimiento este mes que aun no registran pago.
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                            <span style={{ fontSize: '0.9rem', color: '#666' }}>Total pendiente:</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--status-red-main)' }}>
+                                ${Math.round(distData.pending_commitments_amount || 0).toLocaleString('es-CL')}
+                            </span>
                         </div>
                     </div>
                 </>

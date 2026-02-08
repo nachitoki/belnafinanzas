@@ -331,7 +331,7 @@ const Commitments = () => {
                         if (name.includes('auto') || name.includes('bencina') || name.includes('tag') || name.includes('seguro auto') || name.includes('permiso') || name.includes('patente')) return 'Transporte';
                         if (name.includes('isapre') || name.includes('seguro vida') || name.includes('medico') || name.includes('farmacia') || name.includes('doctor')) return 'Salud';
                         if (name.includes('credito') || name.includes('prestamo') || name.includes('visa') || name.includes('mastercard') || name.includes('banco') || name.includes('cuota')) return 'Deudas / Financiero';
-                        if (name.includes('super') || name.includes('jumbo') || name.includes('lider') || name.includes('pan') || name.includes('fruta') || name.includes('feria')) return 'Alimentación / Super';
+                        if (name.includes('super') || name.includes('jumbo') || name.includes('lider') || name.includes('unimarc') || name.includes('pan') || name.includes('fruta') || name.includes('feria') || name.includes('almuerzo')) return 'Alimentación / Super';
                         return 'Otros';
                     };
 

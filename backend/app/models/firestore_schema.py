@@ -107,3 +107,13 @@ class ReceiptItem(BaseModel):
     confidence: float  # 0.0 to 1.0
     category_suggested: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+class MealPlan(BaseModel):
+    """Meal Plan subcollection schema (under households)"""
+    date: str  # YYYY-MM-DD
+    type: Literal["lunch", "dinner", "breakfast", "snack"] = "lunch"
+    recipe_id: Optional[str] = None
+    recipe_name: str
+    recipe_cost: Optional[int] = 0
+    updated_at: datetime = Field(default_factory=datetime.now)

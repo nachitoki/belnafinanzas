@@ -362,3 +362,22 @@ export const updateDashboardSettings = async (settings) => {
         throw error;
     }
 };
+
+export const getMeals = async (startDate, endDate) => {
+    try {
+        const response = await axios.get(`${API_URL}/meals`, {
+            params: { start_date: startDate, end_date: endDate },
+            timeout: REQUEST_TIMEOUT_MS,
+        });
+        return response.data;
+    } catch (error) { throw error; }
+};
+
+export const saveMeals = async (meals) => {
+    try {
+        const response = await axios.post(`${API_URL}/meals`, meals, {
+            timeout: REQUEST_TIMEOUT_MS,
+        });
+        return response.data;
+    } catch (error) { throw error; }
+};

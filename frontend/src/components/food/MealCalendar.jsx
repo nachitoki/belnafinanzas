@@ -1,708 +1,441 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getRecipes } from '../../services/api';
-import PillTabs from '../layout/PillTabs';
-
-const STORAGE_PREFIX = 'meal_calendar_';
-const TEMPLATE_KEY = 'meal_calendar_templates';
-
-const buildWeeks = (year, month) => {
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const weeks = [];
-    let day = 1;
-    let weekIndex = 1;
-    while (day <= daysInMonth) {
-        const start = day;
-        const end = Math.min(day + 6, daysInMonth);
-        weeks.push({
-            week: weekIndex,
-            start,
-            end,
-            days: Array.from({ length: end - start + 1 }, (_, i) => start + i)
-        });
-        day = end + 1;
-        weekIndex += 1;
-    }
-    return weeks;
-};
+import { getRecipes, getMeals, saveMeals } from '../../services/api';
 
 const MealCalendar = () => {
     const navigate = useNavigate();
     const [recipes, setRecipes] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedWeek, setSelectedWeek] = useState(1);
-    const [viewMode, setViewMode] = useState('week');
+
+    // View State
+    const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
+    const [currentDate, setCurrentDate] = useState(new Date()); // Pivot date
+
+    // Data State
+    const [calendarData, setCalendarData] = useState({}); // { "YYYY-MM-DD_type": recipeName }
+    const [saving, setSaving] = useState(false);
+
+    // Selection state
     const [activeRecipe, setActiveRecipe] = useState('');
     const [showPicker, setShowPicker] = useState(false);
-    const [search, setSearch] = useState('');
-    const [showRecipes, setShowRecipes] = useState(true);
-    const [savedPulse, setSavedPulse] = useState(false);
-    const [monthOffset, setMonthOffset] = useState(0);
-    const [templates, setTemplates] = useState(() => {
-        try {
-            const raw = localStorage.getItem(TEMPLATE_KEY);
-            return raw ? JSON.parse(raw) : [];
-        } catch (e) {
-            return [];
-        }
-    });
-    const [hasImportedMonth, setHasImportedMonth] = useState(false);
-    const now = new Date();
-    const viewDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const storageKey = `${STORAGE_PREFIX}${year}-${String(month + 1).padStart(2, '0')}`;
 
-    const weeks = useMemo(() => buildWeeks(year, month), [year, month]);
-    const daysInMonth = useMemo(() => new Date(year, month + 1, 0).getDate(), [year, month]);
+    // Month View Interaction
+    const [selectedDay, setSelectedDay] = useState(null); // { date: 'YYYY-MM-DD', type: 'lunch' }
 
-    const [calendarData, setCalendarData] = useState(() => {
-        try {
-            const raw = localStorage.getItem(storageKey);
-            return raw ? JSON.parse(raw) : {};
-        } catch (e) {
-            return {};
-        }
-    });
-
+    // Load Recipes Once
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem(storageKey);
-            setCalendarData(raw ? JSON.parse(raw) : {});
-            setSelectedWeek(1);
-        } catch (e) {
-            setCalendarData({});
-        }
-    }, [storageKey]);
-
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const data = await getRecipes();
-                setRecipes(data || []);
-            } catch (e) {
-                console.error('Error loading recipes', e);
-                setRecipes([]);
-            } finally {
-                setLoading(false);
-            }
-        };
-        load();
+        getRecipes(1000).then(data => {
+            setRecipes(data || []);
+            setLoading(false);
+        }).catch(err => {
+            console.error('Failed to load recipes', err);
+            setLoading(false);
+        });
     }, []);
 
+    // Load Meals when view or date changes
     useEffect(() => {
+        const fetchMeals = async () => {
+            // Calculate range based on viewMode
+            let start, end;
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            if (viewMode === 'week') {
+                // Start of week (Monday) from currentDate
+                const day = currentDate.getDay();
+                const diff = currentDate.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(currentDate.setDate(diff));
+                const sunday = new Date(monday);
+                sunday.setDate(monday.getDate() + 6);
+
+                start = monday.toISOString().split('T')[0];
+                end = sunday.toISOString().split('T')[0];
+            } else {
+                // Month View: 1st of month to last of month
+                start = new Date(year, month, 1).toISOString().split('T')[0];
+                end = new Date(year, month + 1, 0).toISOString().split('T')[0];
+            }
+
+            try {
+                const data = await getMeals(start, end);
+                // Transform to map: key = date_type, val = recipe_name
+                const map = {};
+                if (Array.isArray(data)) {
+                    data.forEach(m => {
+                        map[`${m.date}_${m.type}`] = m.recipe_name;
+                    });
+                }
+                setCalendarData(prev => ({ ...prev, ...map }));
+            } catch (e) {
+                console.error("Error fetching meals", e);
+            }
+        };
+
+        fetchMeals();
+    }, [currentDate, viewMode]);
+
+    const handleSave = async () => {
+        setSaving(true);
         try {
-            if (monthOffset !== 0) return undefined;
-            localStorage.setItem(storageKey, JSON.stringify(calendarData));
-            setSavedPulse(true);
-            const t = setTimeout(() => setSavedPulse(false), 1200);
-            return () => clearTimeout(t);
+            const payload = Object.entries(calendarData).map(([key, name]) => {
+                const [date, type] = key.split('_');
+                const r = recipes.find(rec => rec.name === name);
+                return {
+                    date,
+                    type,
+                    recipe_name: name,
+                    recipe_id: null,
+                    recipe_cost: r ? (r.cost || 0) : 0
+                };
+            });
+
+            await saveMeals(payload);
+            setSaving(false);
         } catch (e) {
-            // ignore
+            console.error(e);
+            alert('Error al guardar');
+            setSaving(false);
         }
-        return undefined;
-    }, [calendarData, storageKey, monthOffset]);
+    };
 
-    useEffect(() => {
-        try {
-            localStorage.setItem(TEMPLATE_KEY, JSON.stringify(templates));
-        } catch (e) {
-            // ignore
+    // Helpers
+    const formatDate = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
+    const getWeekRange = () => {
+        const d = new Date(currentDate);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const start = new Date(d.setDate(diff));
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+            const dt = new Date(start);
+            dt.setDate(start.getDate() + i);
+            days.push(formatDate(dt));
         }
-    }, [templates]);
+        return { start: formatDate(start), end: formatDate(end), days };
+    };
 
-    const currentWeek = weeks.find((w) => w.week === selectedWeek) || weeks[0];
+    const getMonthDays = () => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
 
-    const recipeCostMap = useMemo(() => {
-        const map = new Map();
-        recipes.forEach((r) => {
-            map.set(r.name, Number(r.cost || 0));
-        });
-        return map;
-    }, [recipes]);
-    const filteredRecipes = useMemo(() => {
-        if (!search.trim()) return recipes;
-        const q = search.trim().toLowerCase();
-        return recipes.filter((r) => (r.name || '').toLowerCase().includes(q));
-    }, [recipes, search]);
+        let startDay = firstDay.getDay();
+        if (startDay === 0) startDay = 7;
 
-    const weekTotal = useMemo(() => {
-        if (!currentWeek) return 0;
-        return currentWeek.days.reduce((sum, day) => {
-            const recipeName = calendarData[day];
-            if (!recipeName) return sum;
-            return sum + (recipeCostMap.get(recipeName) || 0);
-        }, 0);
-    }, [calendarData, currentWeek, recipeCostMap]);
+        const days = [];
+        for (let i = 1; i < startDay; i++) {
+            days.push(null);
+        }
+        for (let i = 1; i <= lastDay.getDate(); i++) {
+            const dt = new Date(year, month, i);
+            days.push(formatDate(dt));
+        }
+        return days;
+    };
 
-    const monthTotal = useMemo(() => {
-        return Object.keys(calendarData).reduce((sum, dayKey) => {
-            const recipeName = calendarData[dayKey];
-            if (!recipeName) return sum;
-            return sum + (recipeCostMap.get(recipeName) || 0);
-        }, 0);
-    }, [calendarData, recipeCostMap]);
-
-    const fmt = (value) => Math.round(Number(value || 0)).toLocaleString('es-CL');
-
-    const updateDay = (day, value) => {
-        if (monthOffset !== 0) return;
-        setCalendarData((prev) => ({
+    const assignRecipe = (date, type, recipeName) => {
+        const key = `${date}_${type}`;
+        setCalendarData(prev => ({
             ...prev,
-            [day]: value
+            [key]: recipeName
         }));
     };
 
-    const jumpToDay = (day) => {
-        const el = document.getElementById(`meal-day-${day}`);
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    };
-
-    const scrollToTop = () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const toggleDay = (day, recipeName) => {
-        if (monthOffset !== 0) return;
-        setCalendarData((prev) => {
-            if (prev[day] === recipeName) {
-                const next = { ...prev };
-                delete next[day];
-                return next;
-            }
-            return {
-                ...prev,
-                [day]: recipeName
-            };
-        });
-    };
-
-    const openPicker = (recipeName) => {
-        setActiveRecipe(recipeName);
-        setShowPicker(true);
-    };
-
-    const closePicker = () => {
-        setShowPicker(false);
-    };
-
-    const clearWeek = () => {
-        if (!currentWeek) return;
-        if (monthOffset !== 0) return;
-        const next = { ...calendarData };
-        currentWeek.days.forEach((day) => {
-            delete next[day];
-        });
-        setCalendarData(next);
-    };
-
-    const saveWeekTemplate = () => {
-        if (!currentWeek) return;
-        if (monthOffset !== 0) return;
-        const days = currentWeek.days.map((day) => calendarData[day] || '');
-        if (!days.some(Boolean)) {
-            alert('Primero asigna platos a la semana.');
-            return;
-        }
-        const name = prompt('Nombre de la semana (ej: Economica, Vegetariana, Rapida)');
-        if (!name) return;
-        const template = {
-            id: `${Date.now()}`,
-            name: name.trim(),
-            days,
-            created_at: new Date().toISOString()
-        };
-        setTemplates((prev) => [template, ...prev]);
-    };
-
-    const applyTemplateToWeek = (template) => {
-        if (!currentWeek || !template) return;
-        const next = { ...calendarData };
-        currentWeek.days.forEach((day, idx) => {
-            const value = template.days?.[idx] || '';
-            if (value) next[day] = value;
-        });
-        setCalendarData(next);
-    };
-
-    const deleteTemplate = (templateId) => {
-        setTemplates((prev) => prev.filter((t) => t.id !== templateId));
-    };
-
-    const latestCalendarKey = useMemo(() => {
-        try {
-            const keys = Object.keys(localStorage).filter((k) => k.startsWith(STORAGE_PREFIX));
-            const sorted = keys.sort().reverse();
-            return sorted[0] || null;
-        } catch (e) {
-            return null;
-        }
-    }, [storageKey, hasImportedMonth]);
-
-    const importLatestMonth = () => {
-        if (!latestCalendarKey || latestCalendarKey === storageKey) return;
-        try {
-            const raw = localStorage.getItem(latestCalendarKey);
-            const data = raw ? JSON.parse(raw) : {};
-            if (!data || Object.keys(data).length === 0) return;
-            setCalendarData(data);
-            setHasImportedMonth(true);
-        } catch (e) {
-            // ignore
-        }
-    };
-
-    const copyWeek = (targetWeek) => {
-        if (!currentWeek) return;
-        if (monthOffset !== 0) return;
-        const target = weeks.find((w) => w.week === targetWeek);
-        if (!target) return;
-        const next = { ...calendarData };
-        currentWeek.days.forEach((day, idx) => {
-            const targetDay = target.days[idx];
-            if (!targetDay) return;
-            const value = calendarData[day];
-            if (value) next[targetDay] = value;
-        });
-        setCalendarData(next);
-    };
-
-    return (
-        <div style={{ padding: '20px', maxWidth: '520px', margin: '0 auto', minHeight: 'calc(100vh - var(--topbar-height, 72px) - var(--bottomnav-height, 96px))' }}>
-            <PillTabs
-                items={[
-                    { label: 'Inventario', path: '/inventory?tab=inventario', icon: '\uD83D\uDCE6' },
-                    { label: 'Estrategicos', path: '/products?origin=despensa', icon: '\u2B50' },
-                    { label: 'Platos', path: '/recipes', icon: '\uD83C\uDF7D' },
-                    { label: 'Calendario', path: '/meal-calendar', icon: '\uD83D\uDCC5' },
-                    { label: 'Alertas', path: '/inventory?tab=alertas', icon: '\u26A0' }
-                ]}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+    const renderHeader = () => (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
-                    onClick={() => navigate('/recipes')}
-                    style={{ background: 'transparent', fontSize: '1rem', padding: '0 10px 0 0', border: 'none' }}
+                    onClick={() => navigate('/')}
+                    style={{ background: 'transparent', fontSize: '1.2rem', padding: '0', border: 'none', cursor: 'pointer' }}
                 >
-                    Volver
+                    {'\u2190'}
                 </button>
                 <div>
-                    <h2>Calendario de platos</h2>
-                    <div className="page-subtitle">
-                        Mes: {viewDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
-                    </div>
-                </div>
-                <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <button
-                        onClick={() => setMonthOffset((prev) => (prev === 0 ? -1 : 0))}
-                        style={{
-                            padding: '4px 8px',
-                            borderRadius: '999px',
-                            border: '1px solid var(--border-light)',
-                            background: monthOffset === 0 ? '#ffffff' : '#f8fafc',
-                            cursor: 'pointer',
-                            fontSize: '0.7rem'
-                        }}
-                    >
-                        {monthOffset === 0 ? 'Ver mes anterior' : 'Volver al mes actual'}
-                    </button>
-                    <div style={{ fontSize: '0.75rem', color: savedPulse ? 'var(--status-green-main)' : 'var(--color-text-dim)' }}>
-                        {monthOffset === 0 ? (savedPulse ? 'Guardado OK' : 'Auto-guardado') : 'Solo lectura'}
-                    </div>
+                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Calendario</h2>
+                    <div className="page-subtitle">Planificador de comidas</div>
                 </div>
             </div>
 
-            {loading ? (
-                <div style={{ textAlign: 'center' }}>Cargando platos...</div>
-            ) : (
-                <>
-                    {Object.keys(calendarData || {}).length === 0 && latestCalendarKey && latestCalendarKey !== storageKey && (
-                        <div className="spending-card" style={{ marginBottom: '12px' }}>
-                            <div style={{ fontWeight: '700', marginBottom: '6px' }}>�Cargar mes anterior?</div>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '8px' }}>
-                                Detectamos platos guardados en {latestCalendarKey.replace(STORAGE_PREFIX, '')}.
-                            </div>
-                            <button
-                                onClick={importLatestMonth}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: '8px',
-                                    border: '1px solid var(--border-light)',
-                                    background: '#f8fafc',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Usar platos del mes anterior
-                            </button>
-                        </div>
-                    )}
-                    <div className="spending-card" style={{ marginBottom: '12px' }}>
-                        <div style={{ fontWeight: '700', marginBottom: '4px' }}>Semana</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '8px' }}>
-                            Programa platos por semana y ajusta dia a dia abajo.
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                            <button
-                                onClick={() => setViewMode('week')}
-                                style={{
-                                    flex: 1,
-                                    padding: '6px 10px',
-                                    borderRadius: '999px',
-                                    border: '1px solid var(--border-light)',
-                                    background: viewMode === 'week' ? 'var(--status-green-main)' : 'var(--bg-card)',
-                                    color: viewMode === 'week' ? 'white' : 'inherit',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Semana
-                            </button>
-                            <button
-                                onClick={() => setViewMode('month')}
-                                style={{
-                                    flex: 1,
-                                    padding: '6px 10px',
-                                    borderRadius: '999px',
-                                    border: '1px solid var(--border-light)',
-                                    background: viewMode === 'month' ? 'var(--status-green-main)' : 'var(--bg-card)',
-                                    color: viewMode === 'month' ? 'white' : 'inherit',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Mes
-                            </button>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            {weeks.map((w) => (
-                                <button
-                                    key={`week-${w.week}`}
-                                    onClick={() => setSelectedWeek(w.week)}
-                                    style={{
-                                        padding: '6px 10px',
-                                        borderRadius: '8px',
-                                        border: '1px solid var(--border-light)',
-                                        background: selectedWeek === w.week ? 'var(--status-green-main)' : 'var(--bg-card)',
-                                        color: selectedWeek === w.week ? 'white' : 'inherit',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Semana {w.week}
-                                </button>
-                            ))}
-                        </div>
-                        {currentWeek && viewMode === 'week' && (
-                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginTop: '6px' }}>
-                                Dias {currentWeek.start} al {currentWeek.end}
-                            </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.9rem' }}>
-                            <span>Valor semana</span>
-                            <strong>${fmt(weekTotal)}</strong>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                            <span>Valor mes (programado)</span>
-                            <strong>${fmt(monthTotal)}</strong>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
-                            <button
-                                onClick={clearWeek}
-                                style={{
-                                    padding: '6px 10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid var(--border-light)',
-                                    background: '#f7fafc',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Limpiar semana
-                            </button>
-                            <button
-                                onClick={saveWeekTemplate}
-                                style={{
-                                    padding: '6px 10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid var(--border-light)',
-                                    background: '#ffffff',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Guardar semana
-                            </button>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>Duplicar a</span>
-                                {weeks.filter((w) => w.week !== selectedWeek).map((w) => (
-                                    <button
-                                        key={`copy-week-${w.week}`}
-                                        onClick={() => copyWeek(w.week)}
-                                        style={{
-                                            padding: '6px 10px',
-                                            borderRadius: '999px',
-                                            border: '1px solid var(--border-light)',
-                                            background: '#ffffff',
-                                            cursor: 'pointer',
-                                            fontSize: '0.8rem'
-                                        }}
-                                    >
-                                        Semana {w.week}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {templates.length > 0 && (
-                        <div className="spending-card" style={{ marginBottom: '12px' }}>
-                            <div style={{ fontWeight: '700', marginBottom: '8px' }}>Biblioteca de semanas</div>
-                            <div style={{ display: 'grid', gap: '8px' }}>
-                                {templates.map((t) => (
-                                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                                        <div>
-                                            <div style={{ fontWeight: '600' }}>{t.name}</div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                                {t.days?.filter(Boolean).length || 0} dias con plato
-                                            </div>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '6px' }}>
-                                            <button
-                                                onClick={() => applyTemplateToWeek(t)}
-                                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border-light)', background: '#f8fafc', cursor: 'pointer', fontSize: '0.75rem' }}
-                                            >
-                                                Usar
-                                            </button>
-                                            <button
-                                                onClick={() => deleteTemplate(t.id)}
-                                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
-                                            >
-                                                Eliminar
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    {templates.length === 0 && (
-                        <div className="spending-card" style={{ marginBottom: '12px' }}>
-                            <div style={{ fontWeight: '700', marginBottom: '6px' }}>Biblioteca de semanas</div>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
-                                Aun no tienes plantillas guardadas.
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="spending-card" style={{ marginBottom: '12px' }}>
-                        <div style={{ fontWeight: '700', marginBottom: '8px' }}>Platos y valor</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                {recipes.length} platos disponibles
-                            </div>
-                            <button
-                                onClick={() => setShowRecipes((prev) => !prev)}
-                                style={{
-                                    border: '1px solid var(--border-light)',
-                                    background: '#f7fafc',
-                                    padding: '4px 8px',
-                                    borderRadius: '999px',
-                                    fontSize: '0.75rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                {showRecipes ? 'Ocultar' : 'Mostrar'}
-                            </button>
-                        </div>
-                        <input
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Buscar plato..."
-                            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', marginBottom: '10px' }}
-                        />
-                        {showRecipes && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
-                                {filteredRecipes.map((recipe) => (
-                                    <button
-                                        key={`recipe-card-${recipe.name}`}
-                                        onClick={() => openPicker(recipe.name)}
-                                        style={{
-                                            padding: '8px',
-                                            borderRadius: '10px',
-                                            border: activeRecipe === recipe.name ? '2px solid var(--status-green-main)' : '1px solid var(--border-light)',
-                                            background: 'var(--bg-card)',
-                                            textAlign: 'left',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        <div style={{ height: '70px', borderRadius: '8px', background: '#edf2f7', marginBottom: '6px' }} />
-                                        <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{recipe.name}</div>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                            ${fmt(recipe.cost || 0)}
-                                        </div>
-                                    </button>
-                                ))}
-                                {filteredRecipes.length === 0 && (
-                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
-                                        Sin resultados.
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="spending-card" style={{ marginBottom: '12px' }}>
-                        <div style={{ fontWeight: '700', marginBottom: '8px' }}>Platos por dia</div>
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                            <select
-                                onChange={(e) => jumpToDay(e.target.value)}
-                                defaultValue=""
-                                style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
-                            >
-                                <option value="">Ir al dia...</option>
-                                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
-                                    <option key={`jump-${day}`} value={day}>
-                                        Dia {day}
-                                    </option>
-                                ))}
-                            </select>
-                            <button
-                                onClick={scrollToTop}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: '6px',
-                                    border: '1px solid var(--border-light)',
-                                    background: '#f7fafc',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Subir
-                            </button>
-                        </div>
-                        {viewMode === 'week' && currentWeek?.days.map((day) => (
-                            <div key={`day-${day}`} id={`meal-day-${day}`} style={{ marginBottom: '10px' }}>
-                                <div style={{ fontSize: '0.85rem', marginBottom: '4px' }}>Dia {day}</div>
-                                <select
-                                    value={calendarData[day] || ''}
-                                    onChange={(e) => updateDay(day, e.target.value)}
-                                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
-                                >
-                                    <option value="">Sin plato</option>
-                                    {filteredRecipes.map((recipe) => (
-                                        <option key={`${day}-${recipe.name}`} value={recipe.name}>
-                                            {recipe.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        ))}
-                        {viewMode === 'month' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-                                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
-                                    <div key={`month-day-${day}`} id={`meal-day-${day}`} style={{ border: '1px solid var(--border-light)', borderRadius: '10px', padding: '8px' }}>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '6px' }}>Dia {day}</div>
-                                        <select
-                                            value={calendarData[day] || ''}
-                                            onChange={(e) => updateDay(day, e.target.value)}
-                                        style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '0.85rem' }}
-                                        >
-                                            <option value="">Sin plato</option>
-                                            {filteredRecipes.map((recipe) => (
-                                                <option key={`${day}-${recipe.name}`} value={recipe.name}>
-                                                    {recipe.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </>
-            )}
-            {showPicker && currentWeek && (
-                <div
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                    onClick={() => setViewMode('week')}
                     style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0,0,0,0.35)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 200
+                        padding: '6px 12px', borderRadius: '20px', border: 'none',
+                        background: viewMode === 'week' ? 'var(--status-green-main)' : '#f0f0f0',
+                        color: viewMode === 'week' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
                     }}
-                    onClick={closePicker}
                 >
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                            width: '90%',
-                            maxWidth: '360px',
-                            background: 'white',
-                            borderRadius: '12px',
-                            padding: '16px',
-                            boxShadow: '0 10px 20px rgba(0,0,0,0.15)'
-                        }}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <div style={{ fontWeight: '700' }}>{activeRecipe}</div>
-                            <button
-                                onClick={closePicker}
-                                style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    fontSize: '1.1rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                x
-                            </button>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '10px' }}>
-                            Dias {currentWeek.start} al {currentWeek.end}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-                            {currentWeek.days.map((day) => (
-                                <button
-                                    key={`pick-${day}`}
-                                    onClick={() => toggleDay(day, activeRecipe)}
-                                    style={{
-                                        padding: '8px',
-                                        borderRadius: '8px',
-                                        border: calendarData[day] === activeRecipe ? '2px solid var(--status-green-main)' : '1px solid var(--border-light)',
-                                        background: calendarData[day] === activeRecipe ? '#e6f4ea' : '#f7fafc',
-                                        cursor: 'pointer',
-                                        fontWeight: '600'
-                                    }}
-                                >
-                                    Dia {day}
-                                </button>
-                            ))}
-                        </div>
-                        <button
-                            onClick={closePicker}
+                    Semana
+                </button>
+                <button
+                    onClick={() => setViewMode('month')}
+                    style={{
+                        padding: '6px 12px', borderRadius: '20px', border: 'none',
+                        background: viewMode === 'month' ? 'var(--status-green-main)' : '#f0f0f0',
+                        color: viewMode === 'month' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
+                    }}
+                >
+                    Mes
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderNav = () => {
+        const move = (dir) => {
+            const d = new Date(currentDate);
+            if (viewMode === 'week') d.setDate(d.getDate() + (dir * 7));
+            else d.setMonth(d.getMonth() + dir);
+            setCurrentDate(d);
+        };
+
+        let label = '';
+        if (viewMode === 'week') {
+            const { start, end } = getWeekRange();
+            const s = start.split('-');
+            const e = end.split('-');
+            label = `${s[2]}/${s[1]} - ${e[2]}/${e[1]}`;
+        } else {
+            const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            label = `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+        }
+
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', background: 'var(--bg-card)', padding: '10px', borderRadius: '8px' }}>
+                <button onClick={() => move(-1)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}>{'<'}</button>
+                <div style={{ fontWeight: '700' }}>{label}</div>
+                <button onClick={() => move(1)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}>{'>'}</button>
+            </div>
+        );
+    };
+
+    const renderWeekView = () => {
+        const { days } = getWeekRange();
+        const type = 'lunch';
+
+        return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                {days.map(date => {
+                    const key = `${date}_${type}`;
+                    const mealName = calendarData[key];
+                    const recipe = recipes.find(r => r.name === mealName);
+                    const dayName = new Date(date).toLocaleDateString('es-CL', { weekday: 'long' });
+                    const dateNum = date.split('-')[2];
+                    const isSelected = selectedDay && selectedDay.date === date;
+
+                    return (
+                        <div
+                            key={date}
+                            onClick={() => {
+                                setSelectedDay({ date, type });
+                                setShowPicker(true);
+                            }}
+                            className="spending-card"
                             style={{
-                                marginTop: '12px',
-                                width: '100%',
-                                padding: '8px 12px',
-                                borderRadius: '8px',
-                                border: '1px solid var(--border-light)',
-                                background: '#f7fafc',
-                                cursor: 'pointer'
+                                padding: '12px', minHeight: '80px', cursor: 'pointer',
+                                border: isSelected ? '2px solid var(--status-blue-main)' : '1px solid transparent',
+                                background: mealName ? '#f0fff4' : 'white'
                             }}
                         >
-                            Listo
-                        </button>
+                            <div style={{ fontSize: '0.8rem', fontWeight: '700', textTransform: 'capitalize', color: 'var(--color-text-dim)', marginBottom: '4px' }}>
+                                {dayName} {dateNum}
+                            </div>
+                            {mealName ? (
+                                <div>
+                                    <div style={{ fontWeight: '600', fontSize: '0.9rem', lineHeight: '1.2', color: 'var(--status-green-dark)' }}>{mealName}</div>
+                                    {recipe && recipe.cost && (
+                                        <div style={{ fontSize: '0.75rem', marginTop: '4px', color: '#666' }}>
+                                            ${parseInt(recipe.cost).toLocaleString('es-CL')}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={{ color: '#ccc', fontSize: '0.85rem', fontStyle: 'italic' }}>Tocá para asignar</div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    const renderMonthView = () => {
+        const days = getMonthDays();
+        const weekDays = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
+        const type = 'lunch';
+
+        return (
+            <div style={{ background: 'white', borderRadius: '12px', padding: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>
+                    {weekDays.map(d => (
+                        <div key={d} style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: '700', color: '#888' }}>{d}</div>
+                    ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                    {days.map((date, idx) => {
+                        if (!date) return <div key={`empty-${idx}`} />;
+
+                        const key = `${date}_${type}`;
+                        const mealName = calendarData[key];
+                        const dayNum = parseInt(date.split('-')[2]);
+
+                        return (
+                            <div
+                                key={date}
+                                onClick={() => {
+                                    setSelectedDay({ date, type });
+                                    setShowPicker(true);
+                                }}
+                                style={{
+                                    aspectRatio: '1',
+                                    borderRadius: '6px',
+                                    border: '1px solid #eee',
+                                    padding: '4px',
+                                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+                                    cursor: 'pointer',
+                                    background: mealName ? '#dcfce7' : 'transparent',
+                                    position: 'relative'
+                                }}
+                            >
+                                <span style={{ fontSize: '0.8rem', fontWeight: '600', marginBottom: '2px' }}>{dayNum}</span>
+                                {mealName && (
+                                    <div style={{
+                                        width: '6px', height: '6px', borderRadius: '50%',
+                                        background: 'var(--status-green-main)',
+                                        marginTop: 'auto', marginBottom: '4px'
+                                    }} />
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
+    const renderPicker = () => {
+        if (!showPicker || !selectedDay) return null;
+
+        const key = `${selectedDay.date}_${selectedDay.type}`;
+        const currentMeal = calendarData[key];
+        const currentRecipe = recipes.find(r => r.name === currentMeal);
+
+        return (
+            <div style={{
+                position: 'fixed', inset: 0, zIndex: 1000,
+                background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'end', justifyContent: 'center'
+            }}>
+                <div style={{
+                    background: 'white', width: '100%', maxWidth: '480px',
+                    borderRadius: '20px 20px 0 0', padding: '20px',
+                    maxHeight: '80vh', display: 'flex', flexDirection: 'column'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <div>
+                            <h3 style={{ margin: 0 }}>
+                                {new Date(selectedDay.date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </h3>
+                            <div className="page-subtitle">Planificar Almuerzo</div>
+                        </div>
+                        <button onClick={() => setShowPicker(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+                    </div>
+
+                    {currentMeal && (
+                        <div style={{ marginBottom: '20px', padding: '12px', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                            <div style={{ fontWeight: '700', color: '#166534' }}>{currentMeal}</div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.9rem', color: '#15803d' }}>
+                                <span>Costo estimado:</span>
+                                <span>${currentRecipe ? parseInt(currentRecipe.cost).toLocaleString('es-CL') : '0'}</span>
+                            </div>
+                            <div style={{ marginTop: '8px', fontSize: '0.85rem' }}>
+                                <span style={{ fontWeight: '600' }}>Ingredientes:</span> {currentRecipe?.ingredients?.join(', ') || 'N/A'}
+                            </div>
+                            <button
+                                onClick={() => {
+                                    assignRecipe(selectedDay.date, selectedDay.type, null);
+                                    setShowPicker(false);
+                                }}
+                                style={{ marginTop: '10px', width: '100%', padding: '6px', background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '6px', cursor: 'pointer' }}
+                            >
+                                Quitar plato
+                            </button>
+                        </div>
+                    )}
+
+                    <div style={{ fontWeight: '600', marginBottom: '8px' }}>Seleccionar Receta</div>
+                    <input
+                        placeholder="Buscar plato..."
+                        onChange={(e) => setActiveRecipe(e.target.value)}
+                        value={activeRecipe}
+                        style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '10px' }}
+                        autoFocus
+                    />
+
+                    <div style={{ overflowY: 'auto', flex: 1 }}>
+                        {recipes.filter(r => r.name.toLowerCase().includes(activeRecipe.toLowerCase())).slice(0, 50).map(r => (
+                            <div
+                                key={r.name}
+                                onClick={() => {
+                                    assignRecipe(selectedDay.date, selectedDay.type, r.name);
+                                    setShowPicker(false);
+                                    setActiveRecipe('');
+                                }}
+                                style={{
+                                    padding: '10px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}
+                            >
+                                <span>{r.name}</span>
+                                <span style={{ fontSize: '0.85rem', color: '#888' }}>${parseInt(r.cost).toLocaleString('es-CL')}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
+            </div>
+        );
+    };
+
+    return (
+        <div style={{ padding: '20px', maxWidth: '480px', margin: '0 auto', minHeight: '100vh', paddingBottom: '100px' }}>
+            {renderHeader()}
+            {renderNav()}
+
+            {loading ? <div className="loading-text">Cargando platos...</div> : (
+                <>
+                    {viewMode === 'week' ? renderWeekView() : renderMonthView()}
+                </>
             )}
+
+            <div style={{ position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '440px', zIndex: 900 }}>
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    style={{
+                        width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                        background: 'var(--status-blue-main)', color: 'white',
+                        fontWeight: '700', fontSize: '1rem',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                        opacity: saving ? 0.8 : 1, cursor: saving ? 'wait' : 'pointer'
+                    }}
+                >
+                    {saving ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+            </div>
+            {renderPicker()}
         </div>
     );
 };
 
 export default MealCalendar;
-
-
-
-
-
-
-
-
-

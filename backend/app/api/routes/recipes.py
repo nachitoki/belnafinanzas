@@ -42,14 +42,17 @@ def _parse_ingredients(value: str) -> list[str]:
     return result
 
 
-@router.get("/recipes")
-def list_recipes(limit: int = Query(200, ge=1, le=1000)):
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def _get_cached_recipes():
+    if not CSV_PATH.exists():
+        return []
+    
+    items = []
     try:
-        if not CSV_PATH.exists():
-            return []
         with CSV_PATH.open("r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
-            items = []
             for row in reader:
                 name = (row.get("Receta") or "").strip()
                 if not name:
@@ -63,8 +66,19 @@ def list_recipes(limit: int = Query(200, ge=1, le=1000)):
                     "ingredients": ingredients,
                     "cost": cost_value
                 })
-                if len(items) >= limit:
-                    break
-        return items
+    except Exception as e:
+        print(f"Error reading recipes CSV: {e}")
+        return []
+    return items
+
+
+
+@router.get("/recipes")
+def list_recipes(limit: int = Query(200, ge=1, le=1000)):
+    try:
+        items = _get_cached_recipes()
+        return items[:limit]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
