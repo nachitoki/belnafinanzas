@@ -174,18 +174,6 @@ const MealCalendar = () => {
         }));
     };
 
-    // Template State
-    const [templates, setTemplates] = useState([]);
-    const [showTemplateModal, setShowTemplateModal] = useState(false);
-    const [templateName, setTemplateName] = useState('');
-
-    useEffect(() => {
-        const saved = localStorage.getItem('meal_plan_templates');
-        if (saved) {
-            try { setTemplates(JSON.parse(saved)); } catch (e) { }
-        }
-    }, []);
-
     const saveTemplate = () => {
         if (!templateName) return;
         // Get current week's data from memory (calendarData)
@@ -286,7 +274,8 @@ const MealCalendar = () => {
             if (name) {
                 const r = recipes.find(rec => rec.name === name);
                 if (r && r.cost) total += parseInt(r.cost);
-            });
+            }
+        });
         return total;
     };
 
