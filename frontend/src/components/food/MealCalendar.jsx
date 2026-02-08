@@ -399,10 +399,9 @@ const MealCalendar = () => {
     };
 
     const getWeekNumber = (d) => {
-        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        const firstDayOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+        const dayOfWeek = firstDayOfMonth.getDay() || 7; // 1 (Mon) - 7 (Sun)
+        return Math.ceil((d.getDate() + dayOfWeek - 1) / 7);
     };
 
     // --- UI Renders ---

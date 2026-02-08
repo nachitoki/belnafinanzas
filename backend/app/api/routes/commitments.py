@@ -46,6 +46,8 @@ def list_commitments(
         # Synthetic Commitment: Almuerzos Planificados
         try:
             start_of_month = datetime(now.year, now.month, 1).strftime("%Y-%m-%d")
+            current_month_str = now.strftime("%Y-%m")
+            
             meal_docs = db.collection("households").document(household_id)\
                 .collection("meal_plans")\
                 .where("date", ">=", start_of_month)\
@@ -53,9 +55,6 @@ def list_commitments(
                 
             meals_total = 0
             for m in meal_docs:
-                m_data = m.to_dict()
-                meals_total += int(m_data.get("recipe_cost") or 0)
-                
                 m_data = m.to_dict()
                 meals_total += int(m_data.get("recipe_cost") or 0)
                 
@@ -71,8 +70,7 @@ def list_commitments(
             
             compra_grande_total = meals_total + extras_total
 
-            # 1. Almuerzos Planificados (Visible separately?)
-            # User said "bajo la tarjeta... otra tarjeta". So we keep both.
+            # 1. Almuerzos Planificados
             results.append({
                 "id": "synthetic_meals",
                 "name": "Almuerzos Planificados",
