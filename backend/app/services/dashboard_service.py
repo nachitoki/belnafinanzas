@@ -11,6 +11,7 @@ from app.domain.logic import (
 )
 
 _CACHE = {}
+_CACHE_TTL_SECONDS = 60  # Cache dashboard results for 60 seconds
 
 class DashboardService:
     def __init__(self, db: Client):
