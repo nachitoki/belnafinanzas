@@ -381,3 +381,25 @@ export const saveMeals = async (meals) => {
         return response.data;
     } catch (error) { throw error; }
 };
+
+// Shopping List
+export const getShoppingList = async (month) => {
+    try {
+        const response = await axios.get(`${API_URL}/shopping-list`, { params: { month } });
+        return response.data;
+    } catch (error) { throw error; }
+};
+
+export const addShoppingItem = async (item) => {
+    try {
+        const response = await axios.post(`${API_URL}/shopping-list`, item);
+        return response.data;
+    } catch (error) { throw error; }
+};
+
+export const deleteShoppingItem = async (id) => {
+    try {
+        const response = await axios.delete(`${API_URL}/shopping-list/${id}`);
+        return response.data;
+    } catch (error) { throw error; }
+};

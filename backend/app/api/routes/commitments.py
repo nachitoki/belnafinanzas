@@ -56,7 +56,23 @@ def list_commitments(
                 m_data = m.to_dict()
                 meals_total += int(m_data.get("recipe_cost") or 0)
                 
-            # Always append synthetic meal commitment to verify visibility, even if 0
+                m_data = m.to_dict()
+                meals_total += int(m_data.get("recipe_cost") or 0)
+                
+            # Fetch Extra Shopping Items for the month
+            shopping_docs = db.collection("households").document(household_id)\
+                .collection("shopping_list")\
+                .where("month", "==", current_month_str)\
+                .stream()
+            
+            extras_total = 0
+            for s in shopping_docs:
+                extras_total += int(s.to_dict().get("estimated_cost") or 0)
+            
+            compra_grande_total = meals_total + extras_total
+
+            # 1. Almuerzos Planificados (Visible separately?)
+            # User said "bajo la tarjeta... otra tarjeta". So we keep both.
             results.append({
                 "id": "synthetic_meals",
                 "name": "Almuerzos Planificados",
@@ -69,6 +85,22 @@ def list_commitments(
                 "last_paid_at": None,
                 "created_at": now.isoformat()
             })
+            
+            # 2. Compra Grande (Sum of All)
+            results.append({
+                "id": "synthetic_shopping",
+                "name": "Total Compra Grande",
+                "amount": compra_grande_total,
+                "frequency": "monthly",
+                "flow_category": "structural",
+                "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
+                "installments_total": 0,
+                "installments_paid": 0,
+                "last_paid_at": None,
+                "created_at": now.isoformat(),
+                "description": f"Almuerzos: ${meals_total:,} + Extras: ${extras_total:,}"
+            })
+
         except Exception as e:
             print(f"Error calculating synthetic meals: {e}")
 

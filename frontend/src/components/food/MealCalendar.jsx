@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getRecipes, getMeals, saveMeals } from '../../services/api';
+import { getRecipes, getMeals, saveMeals, getShoppingList, addShoppingItem, deleteShoppingItem } from '../../services/api';
 
 const MealCalendar = () => {
     const navigate = useNavigate();
@@ -15,12 +15,23 @@ const MealCalendar = () => {
     const [calendarData, setCalendarData] = useState({}); // { "YYYY-MM-DD_type": recipeName }
     const [saving, setSaving] = useState(false);
 
+    // Shopping List State
+    const [showShoppingModal, setShowShoppingModal] = useState(false);
+    const [shoppingItems, setShoppingItems] = useState([]);
+    const [newItemName, setNewItemName] = useState('');
+    const [newItemCost, setNewItemCost] = useState('');
+
     // Selection state
     const [activeRecipe, setActiveRecipe] = useState('');
     const [showPicker, setShowPicker] = useState(false);
 
     // Month View Interaction
     const [selectedDay, setSelectedDay] = useState(null); // { date: 'YYYY-MM-DD', type: 'lunch' }
+
+    // Template State
+    const [templates, setTemplates] = useState([]);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [templateName, setTemplateName] = useState('');
 
     // Load Recipes Once
     useEffect(() => {
@@ -31,11 +42,16 @@ const MealCalendar = () => {
             console.error('Failed to load recipes', err);
             setLoading(false);
         });
+
+        const saved = localStorage.getItem('meal_plan_templates');
+        if (saved) {
+            try { setTemplates(JSON.parse(saved)); } catch (e) { }
+        }
     }, []);
 
-    // Load Meals when view or date changes
+    // Load Meals and Shopping List when view or date changes
     useEffect(() => {
-        const fetchMeals = async () => {
+        const fetchAll = async () => {
             // Calculate range based on viewMode
             let start, end;
             const year = currentDate.getFullYear();
@@ -67,12 +83,18 @@ const MealCalendar = () => {
                     });
                 }
                 setCalendarData(prev => ({ ...prev, ...map }));
+
+                // Fetch Shopping List for current month
+                const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+                const extras = await getShoppingList(monthStr);
+                setShoppingItems(extras || []);
+
             } catch (e) {
-                console.error("Error fetching meals", e);
+                console.error("Error fetching data", e);
             }
         };
 
-        fetchMeals();
+        fetchAll();
     }, [currentDate, viewMode]);
 
     const handleSave = async () => {
@@ -264,16 +286,141 @@ const MealCalendar = () => {
             if (name) {
                 const r = recipes.find(rec => rec.name === name);
                 if (r && r.cost) total += parseInt(r.cost);
-            }
-        });
+            });
         return total;
+    };
+
+    // --- Shopping List Logic ---
+    const handleAddShoppingItem = async () => {
+        if (!newItemName) return;
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+        try {
+            const item = {
+                name: newItemName,
+                estimated_cost: parseInt(newItemCost || '0'),
+                month: monthStr,
+                is_checked: false
+            };
+            const added = await addShoppingItem(item);
+            setShoppingItems([...shoppingItems, added]);
+            setNewItemName('');
+            setNewItemCost('');
+        } catch (e) { alert('Error adding item'); }
+    };
+
+    const handleDeleteShoppingItem = async (id) => {
+        if (!confirm('Eliminar item?')) return;
+        try {
+            await deleteShoppingItem(id);
+            setShoppingItems(shoppingItems.filter(i => i.id !== id));
+        } catch (e) { alert('Error deleting'); }
+    };
+
+    const calculateShoppingTotal = () => {
+        const mealsTotal = getMonthMealsTotal();
+        const extrasTotal = shoppingItems.reduce((acc, curr) => acc + (parseInt(curr.estimated_cost) || 0), 0);
+        return { mealsTotal, extrasTotal, grandTotal: mealsTotal + extrasTotal };
+    };
+
+    const getMonthMealsTotal = () => {
+        // We need month items. calendarData has everything loaded SO FAR.
+        // We should filter by current month.
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const items = Object.entries(calendarData).filter(([key, val]) => {
+            const date = key.split('_')[0];
+            const d = new Date(date);
+            return d.getFullYear() === year && d.getMonth() === month && val;
+        });
+
+        return items.reduce((acc, [key, name]) => {
+            const r = recipes.find(rec => rec.name === name);
+            return acc + (r ? parseInt(r.cost || 0) : 0);
+        }, 0);
+    };
+
+    const renderShoppingModal = () => {
+        if (!showShoppingModal) return null;
+        const { mealsTotal, extrasTotal, grandTotal } = calculateShoppingTotal();
+
+        return (
+            <div style={{
+                position: 'fixed', inset: 0, zIndex: 1100,
+                background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+                <div style={{ background: 'white', width: '90%', maxWidth: '450px', borderRadius: '12px', padding: '20px', maxHeight: '85vh', overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h3 style={{ margin: 0 }}>Compra Grande</h3>
+                        <button onClick={() => setShowShoppingModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+                    </div>
+
+                    {/* Summary Card */}
+                    <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #bbf7d0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ color: '#166534' }}>Almuerzos ({new Date(currentDate).toLocaleDateString('es-CL', { month: 'long' })})</span>
+                            <span style={{ fontWeight: '600', color: '#166534' }}>${mealsTotal.toLocaleString('es-CL')}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span style={{ color: '#166534' }}>Insumos Extra</span>
+                            <span style={{ fontWeight: '600', color: '#166534' }}>${extrasTotal.toLocaleString('es-CL')}</span>
+                        </div>
+                        <div style={{ height: '1px', background: '#bbf7d0', margin: '8px 0' }}></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem' }}>
+                            <span style={{ fontWeight: '700', color: '#166534' }}>Total Estimado</span>
+                            <span style={{ fontWeight: '800', color: '#166534' }}>${grandTotal.toLocaleString('es-CL')}</span>
+                        </div>
+                    </div>
+
+                    <h4 style={{ marginBottom: '10px' }}>Insumos Extra</h4>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                        <input
+                            placeholder="Ítem (ej: Detergente)"
+                            value={newItemName}
+                            onChange={e => setNewItemName(e.target.value)}
+                            style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                        />
+                        <input
+                            placeholder="$$"
+                            type="number"
+                            value={newItemCost}
+                            onChange={e => setNewItemCost(e.target.value)}
+                            style={{ width: '80px', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                        />
+                        <button onClick={handleAddShoppingItem} style={{ padding: '8px', background: 'var(--status-blue-main)', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>+</button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {shoppingItems.map(item => (
+                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', borderBottom: '1px solid #f0f0f0' }}>
+                                <div>
+                                    <div style={{ fontWeight: '600' }}>{item.name}</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#888' }}>${item.estimated_cost?.toLocaleString('es-CL')}</div>
+                                </div>
+                                <button onClick={() => handleDeleteShoppingItem(item.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Eliminar</button>
+                            </div>
+                        ))}
+                        {shoppingItems.length === 0 && <div style={{ color: '#ccc', fontStyle: 'italic', textAlign: 'center' }}>No hay insumos extra.</div>}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const getWeekNumber = (d) => {
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     };
 
     // --- UI Renders ---
 
     const renderHeader = () => (
         <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button
                         onClick={() => navigate('/')}
@@ -283,55 +430,73 @@ const MealCalendar = () => {
                     </button>
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Calendario</h2>
-                        <div className="page-subtitle">Planificador de comidas</div>
+                        <div className="page-subtitle">Planificador</div>
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                        onClick={() => setViewMode('week')}
-                        style={{
-                            padding: '6px 12px', borderRadius: '20px', border: 'none',
-                            background: viewMode === 'week' ? 'var(--status-green-main)' : '#f0f0f0',
-                            color: viewMode === 'week' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
-                        }}
-                    >
-                        Semana
-                    </button>
-                    <button
-                        onClick={() => setViewMode('month')}
-                        style={{
-                            padding: '6px 12px', borderRadius: '20px', border: 'none',
-                            background: viewMode === 'month' ? 'var(--status-green-main)' : '#f0f0f0',
-                            color: viewMode === 'month' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
-                        }}
-                    >
-                        Mes
-                    </button>
-                </div>
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    style={{
+                        padding: '8px 16px', borderRadius: '20px', border: 'none',
+                        background: 'var(--status-blue-main)', color: 'white',
+                        fontWeight: '600', fontSize: '0.9rem',
+                        opacity: saving ? 0.7 : 1, cursor: saving ? 'wait' : 'pointer'
+                    }}
+                >
+                    {saving ? 'Guardando...' : 'Guardar'}
+                </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '16px' }}>
+                <button
+                    onClick={() => setViewMode('week')}
+                    style={{
+                        padding: '6px 16px', borderRadius: '20px', border: 'none',
+                        background: viewMode === 'week' ? 'var(--status-green-main)' : '#f0f0f0',
+                        color: viewMode === 'week' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
+                    }}
+                >
+                    Semana
+                </button>
+                <button
+                    onClick={() => setViewMode('month')}
+                    style={{
+                        padding: '6px 16px', borderRadius: '20px', border: 'none',
+                        background: viewMode === 'month' ? 'var(--status-green-main)' : '#f0f0f0',
+                        color: viewMode === 'month' ? 'white' : '#666', fontWeight: '600', fontSize: '0.85rem'
+                    }}
+                >
+                    Mes
+                </button>
             </div>
 
             {/* Total Indicator */}
             <div style={{
                 background: 'var(--status-green-transparent)', padding: '10px 16px', borderRadius: '12px',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                color: 'var(--status-green-dark)'
+                color: 'var(--status-green-dark)', marginBottom: '10px'
             }}>
                 <span style={{ fontWeight: '600' }}>Total {viewMode === 'week' ? 'Semana' : 'Mes'}:</span>
                 <span style={{ fontSize: '1.1rem', fontWeight: '800' }}>${calculateTotal().toLocaleString('es-CL')}</span>
             </div>
 
-            {/* Week Actions */}
-            {viewMode === 'week' && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
-                    <button onClick={copyPreviousWeek} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '6px 10px', background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-                        Copiar Anterior
-                    </button>
-                    <button onClick={() => setShowTemplateModal(true)} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '6px 10px', background: '#f3e8ff', color: '#7e22ce', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-                        Plantillas
-                    </button>
-                </div>
-            )}
+            {/* Action Bar */}
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                <button onClick={() => setShowShoppingModal(true)} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '8px 12px', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', border: '1px solid #86efac' }}>
+                    🛍️ Compra Grande / Extras
+                </button>
+                {viewMode === 'week' && (
+                    <>
+                        <button onClick={copyPreviousWeek} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '8px 12px', background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: '20px', cursor: 'pointer' }}>
+                            Copiar Anterior
+                        </button>
+                        <button onClick={() => setShowTemplateModal(true)} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '8px 12px', background: '#f3e8ff', color: '#7e22ce', border: 'none', borderRadius: '20px', cursor: 'pointer' }}>
+                            Plantillas
+                        </button>
+                    </>
+                )}
+            </div>
         </div>
     );
 
@@ -348,7 +513,8 @@ const MealCalendar = () => {
             const { start, end } = getWeekRange();
             const s = start.split('-');
             const e = end.split('-');
-            label = `${s[2]}/${s[1]} - ${e[2]}/${e[1]}`;
+            const weekNum = getWeekNumber(currentDate);
+            label = `Semana ${weekNum} (${s[2]}/${s[1]} - ${e[2]}/${e[1]})`;
         } else {
             const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
             label = `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
@@ -477,18 +643,19 @@ const MealCalendar = () => {
 
         return (
             <div style={{
-                position: 'fixed', inset: 0, zIndex: 1000,
-                background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'end', justifyContent: 'center'
+                position: 'fixed', inset: 0, zIndex: 2000,
+                background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
                 <div style={{
-                    background: 'white', width: '100%', maxWidth: '480px',
-                    borderRadius: '20px 20px 0 0', padding: '20px',
-                    maxHeight: '80vh', display: 'flex', flexDirection: 'column'
+                    background: 'white', width: '90%', maxWidth: '400px',
+                    borderRadius: '12px', padding: '20px',
+                    maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                         <div>
                             <h3 style={{ margin: 0 }}>
-                                {new Date(selectedDay.date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                {new Date(selectedDay.date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric' })}
                             </h3>
                             <div className="page-subtitle">Planificar Almuerzo</div>
                         </div>
@@ -619,23 +786,9 @@ const MealCalendar = () => {
                 </>
             )}
 
-            <div style={{ position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '440px', zIndex: 900 }}>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    style={{
-                        width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
-                        background: 'var(--status-blue-main)', color: 'white',
-                        fontWeight: '700', fontSize: '1rem',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                        opacity: saving ? 0.8 : 1, cursor: saving ? 'wait' : 'pointer'
-                    }}
-                >
-                    {saving ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
-            </div>
             {renderPicker()}
             {renderTemplateModal()}
+            {renderShoppingModal()}
         </div>
     );
 };
