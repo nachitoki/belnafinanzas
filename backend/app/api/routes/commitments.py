@@ -117,12 +117,12 @@ def create_commitment(
     try:
         household_id = user["household_id"]
         name = (payload.get("name") or "").strip()
-        amount = payload.get("amount", 0)
+        amount = payload.get("amount") or 0
         frequency = payload.get("frequency", "monthly")
         next_date: Optional[str] = payload.get("next_date")
         flow_category = payload.get("flow_category") or "structural"
-        installments_total = int(payload.get("installments_total", 0))
-        installments_paid = int(payload.get("installments_paid", 0))
+        installments_total = int(payload.get("installments_total") or 0)
+        installments_paid = int(payload.get("installments_paid") or 0)
 
         if not name:
             raise HTTPException(status_code=400, detail="name is required")

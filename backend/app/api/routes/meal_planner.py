@@ -12,7 +12,7 @@ class MealPlanPayload(BaseModel):
     date: str  # YYYY-MM-DD
     type: str = "lunch"
     recipe_id: Optional[str] = None
-    recipe_name: str
+    recipe_name: Optional[str] = ""
     recipe_cost: Optional[int] = 0
 
 @router.get("/meals")

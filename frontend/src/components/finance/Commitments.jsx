@@ -101,7 +101,10 @@ const Commitments = () => {
             await loadCommitments();
         } catch (e) {
             console.error('Error creating commitment', e);
-            const detail = e.response?.data?.detail || e.message || 'Error desconocido';
+            console.error('Error creating commitment', e);
+            const detail = e.response?.data?.detail
+                ? JSON.stringify(e.response.data.detail)
+                : (e.message || 'Error desconocido');
             alert('Error al guardar: ' + detail);
         } finally {
             setSaving(false);

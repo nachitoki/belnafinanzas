@@ -106,7 +106,7 @@ const MealCalendar = () => {
                 return {
                     date,
                     type,
-                    recipe_name: name,
+                    recipe_name: name || "", // Sanitize null/undefined to empty string
                     recipe_id: null,
                     recipe_cost: r ? (r.cost || 0) : 0
                 };
@@ -116,7 +116,10 @@ const MealCalendar = () => {
             setSaving(false);
         } catch (e) {
             console.error(e);
-            alert('Error al guardar');
+            const detail = e.response?.data?.detail
+                ? JSON.stringify(e.response.data.detail)
+                : (e.message || 'Error desconocido');
+            alert('Error al guardar: ' + detail);
             setSaving(false);
         }
     };
