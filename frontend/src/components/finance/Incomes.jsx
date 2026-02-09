@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getIncomes, createIncome, updateIncome, deleteIncome, getBitacora, askBitacora } from '../../services/api';
+import { getIncomes, createIncome, updateIncome, deleteIncome, getBitacora, askBitacora, getCommitments, getEvents } from '../../services/api';
 import PillTabs from '../layout/PillTabs';
 import { loadDistributionMeta } from '../../utils/distributionMeta';
 
@@ -199,6 +199,71 @@ const Incomes = () => {
             console.error('Error deleting income', e);
             const detail = e.response?.data?.detail || e.message || 'Error desconocido';
             alert('Error al eliminar: ' + detail);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const exportFinancialReport = async () => {
+        try {
+            setSaving(true);
+            const [incomesData, commitmentsData, eventsData] = await Promise.all([
+                getIncomes(),
+                getCommitments(),
+                getEvents()
+            ]);
+
+            const now = new Date();
+            const monthName = now.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+
+            const totalIncome = (incomesData || []).reduce((sum, i) => sum + Number(i.amount || 0), 0);
+            const monthlyCommitments = (commitmentsData || []).filter(c => c.frequency === 'monthly');
+            const oneTimeCommitments = (commitmentsData || []).filter(c => c.frequency !== 'monthly');
+            const totalMonthlyCommitments = monthlyCommitments.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+            const totalOneTimeCommitments = oneTimeCommitments.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+            const balance = totalIncome - totalMonthlyCommitments - totalOneTimeCommitments;
+
+            const fmt = (n) => `$${Math.round(n).toLocaleString('es-CL')}`;
+
+            const lines = [
+                `# Reporte Financiero - ${monthName}`,
+                '', '---', '',
+                '## 💰 Resumen',
+                '| Concepto | Monto |',
+                '|----------|------:|',
+                `| **Ingresos** | ${fmt(totalIncome)} |`,
+                `| **Compromisos Mensuales** | ${fmt(totalMonthlyCommitments)} |`,
+                `| **Compromisos Una Vez** | ${fmt(totalOneTimeCommitments)} |`,
+                `| **Balance** | ${fmt(balance)} |`,
+                '', '---', '',
+                `## 📥 Ingresos (${(incomesData || []).length})`,
+                '| Nombre | Monto | Frecuencia |',
+                '|--------|------:|------------|',
+                ...(incomesData || []).map(i => `| ${i.name} | ${fmt(i.amount)} | ${i.frequency} |`),
+                '', '---', '',
+                `## 📤 Compromisos Mensuales (${monthlyCommitments.length})`,
+                '| Nombre | Monto |',
+                '|--------|------:|',
+                ...monthlyCommitments.map(c => `| ${c.name} | ${fmt(c.amount)} |`),
+                '', '---', '',
+                `## 📤 Compromisos Una Vez (${oneTimeCommitments.length})`,
+                '| Nombre | Monto |',
+                '|--------|------:|',
+                ...oneTimeCommitments.map(c => `| ${c.name} | ${fmt(c.amount)} |`),
+                '', '---', '',
+                '*Generado desde Belna Finanzas*'
+            ];
+
+            const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `reporte_financiero_${now.toISOString().slice(0, 7)}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Error exporting', e);
+            alert('Error al exportar: ' + (e.message || 'Error'));
         } finally {
             setSaving(false);
         }
@@ -407,6 +472,29 @@ const Incomes = () => {
                             </span>
                         </div>
                     </div>
+
+                    {/* Export Report Button */}
+                    <button
+                        onClick={exportFinancialReport}
+                        disabled={saving}
+                        style={{
+                            marginTop: '16px',
+                            width: '100%',
+                            padding: '12px',
+                            borderRadius: '10px',
+                            border: '1px solid var(--border-light)',
+                            background: '#ffffff',
+                            cursor: saving ? 'not-allowed' : 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                        }}
+                    >
+                        📄 {saving ? 'Generando...' : 'Exportar Reporte MD'}
+                    </button>
                 </>
             )}
 
