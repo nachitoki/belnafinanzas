@@ -486,7 +486,7 @@ const MealCalendar = () => {
 
             {/* Action Bar */}
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                <button onClick={() => setShowShoppingModal(true)} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '8px 12px', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', border: '1px solid #86efac' }}>
+                <button onClick={() => setShowShoppingModal(true)} style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '8px 12px', background: '#dcfce7', color: '#166534', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', border: '1px solid #86efac' }}>
                     🛍️ Compra Grande / Extras
                 </button>
                 {viewMode === 'week' && (

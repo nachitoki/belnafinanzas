@@ -198,6 +198,31 @@ const Dashboard = () => {
 
             <div ref={horizonRef}>
                 <Horizon initialItems={upcoming_items} />
+
+                {/* Patrimore Annual Plan Card */}
+                <div
+                    onClick={() => navigate('/plan-anual')}
+                    style={{
+                        marginTop: '16px',
+                        padding: '16px',
+                        borderRadius: '16px',
+                        background: '#EEF2FF',
+                        border: '1px solid #6366F1',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        boxShadow: '0 2px 4px rgba(99, 102, 241, 0.1)'
+                    }}
+                >
+                    <div style={{ fontSize: '1.5rem', padding: '8px', background: '#fff', borderRadius: '12px', color: '#6366F1' }}>
+                        🎯
+                    </div>
+                    <div>
+                        <div style={{ fontWeight: '800', color: '#312E81', fontSize: '1.05rem', marginBottom: '2px' }}>Planificador Anual</div>
+                        <div style={{ fontSize: '0.85rem', color: '#4F46E5', lineHeight: '1.2' }}>Vista Patrimore y flujo anual.</div>
+                    </div>
+                </div>
             </div>
 
             <div className="spending-card" style={{ marginTop: '16px' }} ref={projectRef}>

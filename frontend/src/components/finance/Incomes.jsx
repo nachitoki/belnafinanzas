@@ -334,9 +334,6 @@ const Incomes = () => {
             oxigeno: distributionReal.oxigeno || 0,
             vida: distributionReal.vida || 0,
             blindaje: distributionReal.blindaje || 0,
-            oxigeno: distributionReal.oxigeno || 0,
-            vida: distributionReal.vida || 0,
-            blindaje: distributionReal.blindaje || 0,
             pending: distributionReal.pending_commitments_amount || 0,
             projects: projectImpact.total || 0
         });

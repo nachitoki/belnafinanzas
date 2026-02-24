@@ -8,6 +8,7 @@ import Incomes from './components/finance/Incomes';
 import Commitments from './components/finance/Commitments';
 import Events from './components/finance/Events';
 import FinanceHorizon from './components/finance/Horizon';
+import AnnualPlan from './components/finance/AnnualPlan';
 import Recipes from './components/food/Recipes';
 import Inventory from './components/food/Inventory';
 import MealCalendar from './components/food/MealCalendar';
@@ -36,6 +37,7 @@ function App() {
             <Route path="/commitments" element={<Commitments />} />
             <Route path="/events" element={<Events />} />
             <Route path="/horizon" element={<FinanceHorizon />} />
+            <Route path="/plan-anual" element={<AnnualPlan />} />
             <Route path="/recipes" element={<Recipes />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/meal-calendar" element={<MealCalendar />} />
