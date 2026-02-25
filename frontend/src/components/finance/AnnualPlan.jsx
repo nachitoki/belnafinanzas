@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getIncomes, getCommitments, getEvents } from '../../services/api';
 
 const patrimoreMonths = [
     {
@@ -102,15 +103,6 @@ const patrimoreMonths = [
     }
 ];
 
-// Mock flow data for the Annual projection matrix
-const annualProjection = [
-    { month: 'Ene', ingresos: 2100000, gastosFijos: 1500000, neto: 600000, alerta: false },
-    { month: 'Feb', ingresos: 2100000, gastosFijos: 1500000, neto: 600000, alerta: false },
-    { month: 'Mar', ingresos: 2100000, gastosFijos: 2800000, neto: -700000, alerta: true, nota: 'Matrículas y Permisos de Circulación' },
-    { month: 'Abr', ingresos: 2100000, gastosFijos: 1500000, neto: 600000, alerta: false },
-    { month: 'May', ingresos: 2100000, gastosFijos: 1500000, neto: 600000, alerta: false },
-    { month: 'Jun', ingresos: 2100000, gastosFijos: 1600000, neto: 500000, alerta: false },
-];
 
 // Mock Funds (Sobres)
 const familyFunds = [
@@ -123,6 +115,112 @@ const AnnualPlan = () => {
     const currentMonthIndex = new Date().getMonth();
     const [selectedMonth, setSelectedMonth] = useState(currentMonthIndex);
     const [answers, setAnswers] = useState({});
+
+    // States for Flow Data
+    const [annualProjection, setAnnualProjection] = useState([]);
+    const [annualizedCommitments, setAnnualizedCommitments] = useState([]);
+    const [loadingFlow, setLoadingFlow] = useState(true);
+
+    const fetchFlowData = async () => {
+        try {
+            const [inc, com, ev] = await Promise.all([
+                getIncomes(), getCommitments(), getEvents()
+            ]);
+
+            const incomes = inc || [];
+            const commitments = com || [];
+            const events = ev || [];
+
+            // 1. Calculate Monthly Fixed Income
+            const monthlyIncomes = incomes.reduce((sum, item) => {
+                if (item.is_variable) return sum;
+                let amt = Number(item.amount || 0);
+                if (item.frequency === 'weekly') return sum + (amt * 4);
+                if (item.frequency === 'biweekly') return sum + (amt * 2);
+                if (item.frequency === 'yearly' || item.frequency === 'one_time') return sum;
+                return sum + amt;
+            }, 0);
+
+            // 2. Base Monthly Commitments
+            const monthlyCommitmentsList = commitments.filter(c => c.frequency === 'monthly' || c.frequency === 'weekly' || c.frequency === 'biweekly');
+            const baseMonthlyGastos = monthlyCommitmentsList.reduce((sum, c) => {
+                let amt = Number(c.amount || 0);
+                if (c.frequency === 'weekly') return sum + (amt * 4);
+                if (c.frequency === 'biweekly') return sum + (amt * 2);
+                return sum + amt;
+            }, 0);
+
+            // Sorted list of annualized commitments
+            const annualizedList = monthlyCommitmentsList.map(c => {
+                let baseMonth = Number(c.amount || 0);
+                if (c.frequency === 'weekly') baseMonth *= 4;
+                if (c.frequency === 'biweekly') baseMonth *= 2;
+                return { name: c.name, monthly: baseMonth, annual: baseMonth * 12 };
+            }).sort((a, b) => b.annual - a.annual);
+            setAnnualizedCommitments(annualizedList);
+
+            // 3. Build 12-month projection for current year
+            const year = new Date().getFullYear();
+            const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+            const projection = [];
+            for (let i = 0; i < 12; i++) {
+                let monthInc = monthlyIncomes;
+                let monthExp = baseMonthlyGastos;
+                let notas = [];
+
+                const monthStr = `${year}-${String(i + 1).padStart(2, '0')}`;
+
+                // Variable / One-time incomes for this month
+                incomes.forEach(item => {
+                    if (item.is_variable && item.month === monthStr) {
+                        monthInc += Number(item.amount || 0);
+                    }
+                });
+
+                // Specific Commitments for this month (Yearly, One time)
+                commitments.forEach(c => {
+                    if (c.frequency === 'yearly' || c.frequency === 'one_time') {
+                        if (c.next_date && c.next_date.startsWith(monthStr)) {
+                            monthExp += Number(c.amount || 0);
+                            notas.push(`${c.name}`);
+                        } else if (c.frequency === 'yearly' && c.next_date && c.next_date.substring(5, 7) === String(i + 1).padStart(2, '0')) {
+                            // If yearly and falls in this month of any year, just project it for this month
+                            monthExp += Number(c.amount || 0);
+                            notas.push(`${c.name}`);
+                        }
+                    }
+                });
+
+                // Specific Events for this month
+                events.forEach(e => {
+                    if (e.date && e.date.startsWith(monthStr)) {
+                        monthExp += Number(e.amount || 0);
+                        notas.push(e.name);
+                    }
+                });
+
+                const neto = monthInc - monthExp;
+                projection.push({
+                    month: monthNames[i],
+                    ingresos: monthInc,
+                    gastosFijos: monthExp,
+                    neto: neto,
+                    alerta: neto < 0,
+                    nota: notas.join(', ')
+                });
+            }
+            setAnnualProjection(projection);
+            setLoadingFlow(false);
+        } catch (err) {
+            console.error(err);
+            setLoadingFlow(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchFlowData();
+    }, []);
 
     const handleAnswer = (monthId, actIndex, value) => {
         setAnswers(prev => ({
@@ -216,32 +314,90 @@ const AnnualPlan = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {annualProjection.map((row, i) => (
-                                    <tr key={i} style={{
-                                        borderBottom: '1px solid var(--border-light)',
-                                        background: row.alerta ? '#fef2f2' : 'transparent'
-                                    }}>
-                                        <td style={{ padding: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            {row.month}
-                                            {row.alerta && <span style={{ color: '#ef4444' }} title={row.nota}>⚠️</span>}
-                                        </td>
-                                        <td style={{ padding: '12px' }}>${(row.ingresos / 1000)}k</td>
-                                        <td style={{ padding: '12px' }}>${(row.gastosFijos / 1000)}k</td>
-                                        <td style={{ padding: '12px' }}>
-                                            <span style={{
-                                                padding: '4px 8px', borderRadius: '4px', fontWeight: '700',
-                                                background: row.neto > 0 ? '#dcfce7' : '#fecaca',
-                                                color: row.neto > 0 ? '#166534' : '#991b1b'
-                                            }}>
-                                                ${(row.neto / 1000)}k
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {loadingFlow ? (
+                                    <tr><td colSpan="4" style={{ padding: '12px', textAlign: 'center', color: '#888' }}>Cargando datos del flujo real...</td></tr>
+                                ) : (
+                                    annualProjection.map((row, i) => (
+                                        <tr key={i} style={{
+                                            borderBottom: '1px solid var(--border-light)',
+                                            background: row.alerta ? '#fef2f2' : 'transparent'
+                                        }}>
+                                            <td style={{ padding: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                {row.month}
+                                                {row.alerta && <span style={{ color: '#ef4444' }} title={row.nota}>⚠️</span>}
+                                            </td>
+                                            <td style={{ padding: '12px' }}>${(row.ingresos / 1000)}k</td>
+                                            <td style={{ padding: '12px' }}>${(row.gastosFijos / 1000)}k</td>
+                                            <td style={{ padding: '12px' }}>
+                                                <span style={{
+                                                    padding: '4px 8px', borderRadius: '4px', fontWeight: '700',
+                                                    background: row.neto > 0 ? '#dcfce7' : '#fecaca',
+                                                    color: row.neto > 0 ? '#166534' : '#991b1b'
+                                                }}>
+                                                    ${(row.neto / 1000)}k
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )))}
                             </tbody>
                         </table>
                     </div>
                 </div>
+            </div>
+
+            {/* Costo Anualizado de Gastos Recurrentes */}
+            <div style={{ marginBottom: '32px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: '0 0 12px 0', color: 'var(--color-text-main)' }}>
+                    Impacto Anual de Fijos
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '12px' }}>
+                    Tus pagos recurrentes mensualizados, vistos a lo largo de 12 meses.
+                </p>
+
+                {loadingFlow ? (
+                    <div style={{ color: '#888', fontSize: '0.85rem', textAlign: 'center' }}>Cargando gastos fijos...</div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {annualizedCommitments.map((c, idx) => (
+                            <div key={idx} style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '12px',
+                                background: 'var(--color-bg-elevated, #fff)',
+                                border: '1px solid var(--border-light, #e2e8f0)',
+                                borderRadius: '10px'
+                            }}>
+                                <div>
+                                    <div style={{ fontWeight: '600', color: 'var(--color-text-main)', fontSize: '0.95rem' }}>{c.name}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                        {formatCurrency(c.monthly)} / mes
+                                    </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--status-red-main)', fontWeight: '600', marginBottom: '2px' }}>
+                                        Costo a 1 Año
+                                    </div>
+                                    <div style={{ fontWeight: '800', color: 'var(--color-text-main)', fontSize: '1rem' }}>
+                                        {formatCurrency(c.annual)}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {annualizedCommitments.length > 0 && (
+                            <div style={{
+                                marginTop: '4px', padding: '12px', background: '#fef2f2',
+                                borderRadius: '10px', display: 'flex', justifyContent: 'space-between',
+                                border: '1px solid #fecaca'
+                            }}>
+                                <span style={{ fontWeight: '700', color: '#991b1b' }}>Total Anual:</span>
+                                <span style={{ fontWeight: '800', color: '#991b1b' }}>
+                                    {formatCurrency(annualizedCommitments.reduce((acc, curr) => acc + curr.annual, 0))}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Patrimore Monthly Modules */}
