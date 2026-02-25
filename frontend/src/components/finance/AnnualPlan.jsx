@@ -142,19 +142,29 @@ const AnnualPlan = () => {
 
             // 2. Base Monthly Commitments
             const monthlyCommitmentsList = commitments.filter(c => c.frequency === 'monthly' || c.frequency === 'weekly' || c.frequency === 'biweekly');
-            const baseMonthlyGastos = monthlyCommitmentsList.reduce((sum, c) => {
-                let amt = Number(c.amount || 0);
-                if (c.frequency === 'weekly') return sum + (amt * 4);
-                if (c.frequency === 'biweekly') return sum + (amt * 2);
-                return sum + amt;
-            }, 0);
 
             // Sorted list of annualized commitments
             const annualizedList = monthlyCommitmentsList.map(c => {
                 let baseMonth = Number(c.amount || 0);
                 if (c.frequency === 'weekly') baseMonth *= 4;
                 if (c.frequency === 'biweekly') baseMonth *= 2;
-                return { name: c.name, monthly: baseMonth, annual: baseMonth * 12 };
+
+                let remainingMonths = 12;
+                let isInstallment = false;
+                if (c.installments_total > 0) {
+                    isInstallment = true;
+                    remainingMonths = Math.max(0, c.installments_total - (c.installments_paid || 0));
+                }
+
+                const annualImpact = baseMonth * Math.min(12, remainingMonths);
+
+                return {
+                    name: c.name,
+                    monthly: baseMonth,
+                    annual: annualImpact,
+                    isInstallment: isInstallment,
+                    remaining: remainingMonths
+                };
             }).sort((a, b) => b.annual - a.annual);
             setAnnualizedCommitments(annualizedList);
 
@@ -165,10 +175,26 @@ const AnnualPlan = () => {
             const projection = [];
             for (let i = 0; i < 12; i++) {
                 let monthInc = monthlyIncomes;
-                let monthExp = baseMonthlyGastos;
+                let monthExp = 0;
                 let notas = [];
 
                 const monthStr = `${year}-${String(i + 1).padStart(2, '0')}`;
+
+                // Add monthly/weekly/biweekly commitments conditionally
+                monthlyCommitmentsList.forEach(c => {
+                    let amt = Number(c.amount || 0);
+                    if (c.frequency === 'weekly') amt *= 4;
+                    if (c.frequency === 'biweekly') amt *= 2;
+
+                    if (c.installments_total > 0) {
+                        const remaining = Math.max(0, c.installments_total - (c.installments_paid || 0));
+                        if (i < remaining) {
+                            monthExp += amt;
+                        }
+                    } else {
+                        monthExp += amt;
+                    }
+                });
 
                 // Variable / One-time incomes for this month
                 incomes.forEach(item => {
@@ -416,14 +442,16 @@ const AnnualPlan = () => {
                                 borderRadius: '10px'
                             }}>
                                 <div>
-                                    <div style={{ fontWeight: '600', color: 'var(--color-text-main)', fontSize: '0.95rem' }}>{c.name}</div>
+                                    <div style={{ fontWeight: '600', color: 'var(--color-text-main)', fontSize: '0.95rem' }}>
+                                        {c.name} {c.isInstallment && <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--color-text-dim)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', marginLeft: '4px' }}>Cuotas</span>}
+                                    </div>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
                                         {formatCurrency(c.monthly)} / mes
                                     </div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--status-red-main)', fontWeight: '600', marginBottom: '2px' }}>
-                                        Costo a 1 Año
+                                    <div style={{ fontSize: '0.75rem', color: c.isInstallment && c.remaining < 12 ? '#d97706' : 'var(--status-red-main)', fontWeight: '600', marginBottom: '2px' }}>
+                                        {c.isInstallment && c.remaining < 12 ? `Costo Restante (${c.remaining}m)` : 'Costo a 1 Año'}
                                     </div>
                                     <div style={{ fontWeight: '800', color: 'var(--color-text-main)', fontSize: '1rem' }}>
                                         {formatCurrency(c.annual)}
