@@ -118,6 +118,7 @@ const AnnualPlan = () => {
     // States for Flow Data
     const [annualProjection, setAnnualProjection] = useState([]);
     const [annualizedCommitments, setAnnualizedCommitments] = useState([]);
+    const [financialHealth, setFinancialHealth] = useState(null);
     const [loadingFlow, setLoadingFlow] = useState(true);
 
     const fetchFlowData = async () => {
@@ -168,7 +169,25 @@ const AnnualPlan = () => {
             }).sort((a, b) => b.annual - a.annual);
             setAnnualizedCommitments(annualizedList);
 
-            // 3. Build 12-month projection for current year
+            // 3. Calculate Base Monthly Expenses for the 50/30/20 Rule
+            let baseExpenses = 0;
+            monthlyCommitmentsList.forEach(c => {
+                let amt = Number(c.amount || 0);
+                if (c.frequency === 'weekly') amt *= 4;
+                if (c.frequency === 'biweekly') amt *= 2;
+                baseExpenses += amt;
+            });
+            const idealIncome = baseExpenses * 2;
+            const incomeGap = idealIncome > monthlyIncomes ? idealIncome - monthlyIncomes : 0;
+            setFinancialHealth({
+                currentIncome: monthlyIncomes,
+                fixedExpenses: baseExpenses,
+                idealIncome: idealIncome,
+                incomeGap: incomeGap,
+                healthRatio: monthlyIncomes > 0 ? (baseExpenses / monthlyIncomes) * 100 : 100
+            });
+
+            // 4. Build 12-month projection for current year
             const year = new Date().getFullYear();
             const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -361,6 +380,62 @@ const AnnualPlan = () => {
                                 </div>
                             );
                         })}
+                    </div>
+                )}
+            </div>
+
+            {/* Meta de Ingresos (Regla 50/30/20) */}
+            <div style={{ marginBottom: '32px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: '0 0 12px 0', color: 'var(--color-text-main)' }}>
+                    Ingreso Ideal (Regla 50/30/20)
+                </h3>
+                {loadingFlow ? (
+                    <div style={{ color: '#888', fontSize: '0.85rem' }}>Calculando regla 50/30/20...</div>
+                ) : financialHealth && (
+                    <div style={{
+                        background: 'var(--color-bg-elevated, #fff)',
+                        padding: '16px', borderRadius: '12px',
+                        border: '1px solid var(--border-light, #e2e8f0)'
+                    }}>
+                        <p style={{ fontSize: '0.85rem', margin: '0 0 12px 0', color: 'var(--color-text-dim)', lineHeight: '1.4' }}>
+                            Tus <strong>gastos fijos</strong> no deberían superar el <strong>50%</strong> de tus ingresos mensuales.
+                        </p>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>Gastos Fijos/Mes</div>
+                                <div style={{ fontWeight: '700', color: 'var(--color-text-main)' }}>{formatCurrency(financialHealth.fixedExpenses)}</div>
+                                <div style={{ fontSize: '0.7rem', marginTop: '4px', fontWeight: '600', color: financialHealth.healthRatio <= 50 ? '#166534' : '#991b1b' }}>
+                                    {financialHealth.healthRatio.toFixed(1)}% de tu ingreso actual
+                                </div>
+                            </div>
+                            <div style={{ background: '#f0f9ff', padding: '12px', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#0369a1', fontWeight: '600' }}>Ingreso Total Ideal</div>
+                                <div style={{ fontWeight: '800', color: '#0369a1', fontSize: '1.1rem' }}>{formatCurrency(financialHealth.idealIncome)}</div>
+                            </div>
+                        </div>
+
+                        {financialHealth.incomeGap > 0 ? (
+                            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '12px', borderRadius: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <span style={{ fontSize: '1.5rem' }}>📈</span>
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#b45309' }}>Brecha a Generar</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#b45309', lineHeight: '1.3', marginTop: '2px' }}>
+                                        Te faltan <strong>{formatCurrency(financialHealth.incomeGap)}</strong> al mes para estar al día. (Extras o ahorros).
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px', borderRadius: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <span style={{ fontSize: '1.5rem' }}>🏆</span>
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#166534' }}>¡Equilibrio Saludable!</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#166534', lineHeight: '1.3', marginTop: '2px' }}>
+                                        Tu ingreso fijo actual ya cubre tus gastos y margen de ahorro.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
