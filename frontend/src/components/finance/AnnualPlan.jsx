@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getIncomes, getCommitments, getEvents } from '../../services/api';
+import { getIncomes, getCommitments, getEvents, getBitacora } from '../../services/api';
 
 const patrimoreMonths = [
     {
@@ -104,17 +104,16 @@ const patrimoreMonths = [
 ];
 
 
-// Mock Funds (Sobres)
-const familyFunds = [
-    { id: 1, name: 'Homeschooling', current: 150000, target: 400000, color: '#3B82F6' },
-    { id: 2, name: 'Fondo Salud', current: 120000, target: 500000, color: '#10B981' },
-];
 
 const AnnualPlan = () => {
     const navigate = useNavigate();
     const currentMonthIndex = new Date().getMonth();
     const [selectedMonth, setSelectedMonth] = useState(currentMonthIndex);
     const [answers, setAnswers] = useState({});
+
+    // States for Funds Data
+    const [familyFunds, setFamilyFunds] = useState([]);
+    const [loadingFunds, setLoadingFunds] = useState(true);
 
     // States for Flow Data
     const [annualProjection, setAnnualProjection] = useState([]);
@@ -218,8 +217,44 @@ const AnnualPlan = () => {
         }
     };
 
+    const fetchFundsData = async () => {
+        try {
+            const data = await getBitacora();
+            const bitacora = data || [];
+
+            // Filter projects meant as "funds" or savings. We look for 'project' kind.
+            const projects = bitacora.filter(entry =>
+                String(entry.kind || '').toLowerCase() === 'project' &&
+                entry.status !== 'archived' &&
+                Number(entry.meta?.estimated_cost || 0) > 0
+            );
+
+            const colors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+
+            const funds = projects.map((p, idx) => {
+                const target = Number(p.meta?.estimated_cost || 0);
+                const current = Number(p.meta?.total_paid || 0);
+
+                return {
+                    id: p.id,
+                    name: p.title || 'Proyecto Sin Nombre',
+                    current: current,
+                    target: target,
+                    color: colors[idx % colors.length]
+                };
+            });
+
+            setFamilyFunds(funds);
+            setLoadingFunds(false);
+        } catch (err) {
+            console.error(err);
+            setLoadingFunds(false);
+        }
+    };
+
     useEffect(() => {
         fetchFlowData();
+        fetchFundsData();
     }, []);
 
     const handleAnswer = (monthId, actIndex, value) => {
@@ -266,30 +301,42 @@ const AnnualPlan = () => {
                 <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: '0 0 12px 0', color: 'var(--color-text-main)' }}>
                     Fondos Familiares (Sobres)
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {familyFunds.map(fund => {
-                        const pct = Math.min(Math.round((fund.current / fund.target) * 100), 100);
-                        return (
-                            <div key={fund.id} style={{
-                                background: 'var(--color-bg-elevated, #fff)',
-                                padding: '16px', borderRadius: '12px',
-                                border: '1px solid var(--border-light, #e2e8f0)'
-                            }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                    <span style={{ fontWeight: '600', color: 'var(--color-text-main)' }}>{fund.name}</span>
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>{pct}%</span>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)', marginBottom: '12px' }}>
+                    Proyectos activos en tu Bitácora.
+                </p>
+
+                {loadingFunds ? (
+                    <div style={{ color: '#888', fontSize: '0.85rem', textAlign: 'center' }}>Cargando proyectos...</div>
+                ) : familyFunds.length === 0 ? (
+                    <div style={{ color: '#aaa', fontSize: '0.85rem', textAlign: 'center', background: '#f8fafc', padding: '16px', borderRadius: '12px' }}>
+                        No tienes proyectos configurados en la Bitácora.
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {familyFunds.map(fund => {
+                            const pct = Math.min(Math.round((fund.current / fund.target) * 100), 100);
+                            return (
+                                <div key={fund.id} style={{
+                                    background: 'var(--color-bg-elevated, #fff)',
+                                    padding: '16px', borderRadius: '12px',
+                                    border: '1px solid var(--border-light, #e2e8f0)'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                        <span style={{ fontWeight: '600', color: 'var(--color-text-main)' }}>{fund.name}</span>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>{pct}%</span>
+                                    </div>
+                                    <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                                        <div style={{ height: '100%', width: `${pct}%`, background: fund.color, borderRadius: '4px' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                        <span style={{ fontWeight: '600' }}>{formatCurrency(fund.current)}</span>
+                                        <span style={{ color: 'var(--color-text-dim)' }}>Meta: {formatCurrency(fund.target)}</span>
+                                    </div>
                                 </div>
-                                <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
-                                    <div style={{ height: '100%', width: `${pct}%`, background: fund.color, borderRadius: '4px' }} />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                    <span style={{ fontWeight: '600' }}>{formatCurrency(fund.current)}</span>
-                                    <span style={{ color: 'var(--color-text-dim)' }}>Meta: {formatCurrency(fund.target)}</span>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* Matriz de Flujo Anual (from feedback) */}
