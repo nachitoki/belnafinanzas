@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     gemini_model: str | None = None
     gemini_fallback_model: str | None = None
 
+    # Supabase
+    supabase_url: str = ""
+    supabase_key: str = ""
+
     # Telegram
     telegram_bot_token: str
     telegram_secret_token: str = "default-secret-token"

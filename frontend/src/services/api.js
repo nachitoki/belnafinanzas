@@ -385,3 +385,16 @@ export const saveMeals = async (meals) => {
     } catch (error) { throw error; }
 };
 
+export const interpretTransaction = async (text) => {
+    const response = await axios.post(`${API_URL}/advisor/interpret`, { text }, {
+        timeout: REQUEST_TIMEOUT_MS,
+    });
+    return response.data;
+};
+
+export const confirmTransaction = async (data) => {
+    const response = await axios.post(`${API_URL}/advisor/confirm`, data, {
+        timeout: REQUEST_TIMEOUT_MS,
+    });
+    return response.data;
+};

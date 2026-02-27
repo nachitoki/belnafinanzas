@@ -7,8 +7,11 @@ from app.services.receipt_processor import ReceiptProcessor
 from app.services.ai_extractor import GeminiVisionExtractor
 from app.services.price_service import PriceService
 from app.core.config import settings
-from google.cloud.firestore import Client
+from google.cloud.firestore import Client as FirestoreClient
 from google.cloud.storage import Bucket
+from supabase import Client as SupabaseClient
+from app.core.supabase import get_supabase
+from app.services.ai_advisor import AIAdvisorService
 import logging
 import re
 from datetime import datetime
@@ -20,13 +23,15 @@ router = APIRouter()
 
 # Singleton services
 telegram_service = TelegramService.get_instance()
+ai_advisor = AIAdvisorService()
 
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
     x_telegram_bot_api_secret_token: str = Header(None),
-    db: Client = Depends(get_firestore),
-    bucket: Bucket = Depends(get_storage_bucket)
+    db: FirestoreClient = Depends(get_firestore),
+    bucket: Bucket = Depends(get_storage_bucket),
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     """
     Handle incoming Telegram updates (Webhook)
@@ -96,7 +101,7 @@ async def telegram_webhook(
         if photos:
             await _handle_photo_receipt(photos[-1], household_id, user_doc['id'], bucket, db, chat_id)
         elif text:
-            await _handle_text_message(text, household_id, user_doc['id'], db, chat_id)
+            await _handle_text_message(text, household_id, user_doc['id'], db, chat_id, supabase)
             
     except Exception as e:
         logger.error(f"Error processing message: {e}")
@@ -105,7 +110,7 @@ async def telegram_webhook(
     return {"status": "ok"}
 
 
-async def _get_user_by_telegram_id(db: Client, telegram_id: int):
+async def _get_user_by_telegram_id(db: FirestoreClient, telegram_id: int):
     """Find user in Firestore by telegram_user_id"""
     users_ref = db.collection('users')
     query = users_ref.where('telegram_user_id', '==', telegram_id).limit(1).stream()
@@ -116,7 +121,7 @@ async def _get_user_by_telegram_id(db: Client, telegram_id: int):
     return None
 
 
-async def _handle_start(chat_id: int, user_doc: dict, text: str, db: Client, telegram_id: int):
+async def _handle_start(chat_id: int, user_doc: dict, text: str, db: FirestoreClient, telegram_id: int):
     """
     Handle /start command.
     MVP: If text has an email '/start email@example.com', link it.
@@ -269,7 +274,7 @@ async def _handle_photo_receipt(photo, household_id, user_id, bucket, db, chat_i
 
 
 
-async def _handle_text_message(text, household_id, user_id, db, chat_id):
+async def _handle_text_message(text, household_id, user_id, db, chat_id, supabase: SupabaseClient):
     """Handle text messages including correction replies"""
     
     # 0. Check if user is in 'waiting_for_store_name' state
@@ -307,83 +312,64 @@ async def _handle_text_message(text, household_id, user_id, db, chat_id):
             await _reshow_confirmation(receipt_id, household_id, chat_id, db)
             return
 
-    """Parse 'Monto Descripcion' or 'Descripcion Monto'"""
-    amount = None
-    description = None
-    qty = None
-    unit = None
+    await telegram_service.send_message(chat_id, "🤖 Pensando...", parse_mode="HTML")
+
+    # 1. Obtener categorías de Supabase
+    categories_res = supabase.table("categories").select("id, name").eq("household_id", household_id).execute()
+    categories = categories_res.data
     
-    # 1. Try complex patterns with Qty/Unit (e.g. "Pan 2kg 5000" or "5000 Pan 2kg")
-    # Pattern: Description (optional Qty+Unit) Amount
-    match_complex = re.match(r'^(.+?)\s+(?:(\d+(?:\.\d+)?)\s*(kg|g|l|ml|un)\b)?\s*(\d+)$', text, re.IGNORECASE)
-    # Pattern: Amount Description (optional Qty+Unit)
-    match_inv_complex = re.match(r'^(\d+)\s+(.+?)(?:\s+(\d+(?:\.\d+)?)\s*(kg|g|l|ml|un)\b)?$', text, re.IGNORECASE)
+    # 2. IA Interpreta el texto
+    suggestion = await ai_advisor.categorize_text(text, categories)
     
-    if match_complex:
-        description = match_complex.group(1).strip()
-        qty = float(match_complex.group(2)) if match_complex.group(2) else None
-        unit = match_complex.group(3).lower() if match_complex.group(3) else None
-        amount = int(match_complex.group(4))
-    elif match_inv_complex:
-        amount = int(match_inv_complex.group(1))
-        description = match_inv_complex.group(2).strip()
-        qty = float(match_inv_complex.group(3)) if match_inv_complex.group(3) else None
-        unit = match_inv_complex.group(4).lower() if match_inv_complex.group(4) else None
-    
-    # 2. Fallback to simple patterns if complex failed
-    if not amount:
-        match_amount_first = re.match(r'^(\d+)\s+(.+)$', text)
-        match_amount_last = re.match(r'^(.+)\s+(\d+)$', text)
+    if not suggestion:
+        await telegram_service.send_message(chat_id, "❌ No entendí el gasto. Intenta explicármelo de nuevo, por ejemplo: '45 lucas en el Supermercado'.")
+        return
         
-        if match_amount_first:
-            amount = int(match_amount_first.group(1))
-            description = match_amount_first.group(2).strip()
-        elif match_amount_last:
-            description = match_amount_last.group(1).strip()
-            amount = int(match_amount_last.group(2))
-    
-    if not amount:
-        await telegram_service.send_message(chat_id, "❓ No entendí. Envía 'Monto Descripción' (ej: '5000 Almuerzo').")
+    try:
+        amount = int(suggestion.get("amount_hint") or 0)
+    except:
+        amount = 0
+
+    if amount == 0:
+        await telegram_service.send_message(chat_id, f"❌ No pude detectar un monto válido en: '{text}'.")
         return
 
-    # Create Transaction (simplified logic for MVP)
-    house_ref = db.collection('households').document(household_id)
-    
-    # 1. Get first active Account
-    accounts = list(house_ref.collection('accounts').where('is_active', '==', True).limit(1).stream())
-    if not accounts:
-        await telegram_service.send_message(chat_id, "❌ No tienes cuentas activas configuradas.")
-        return
-    account_id = accounts[0].id
-    
-    # 2. Get first expense Category
-    categories = list(house_ref.collection('categories').where('kind', '==', 'expense').limit(1).stream())
-    category_id = categories[0].id if categories else "otros"
-
+    # 3. Guardar en Supabase directamente
     transaction_data = {
-        'occurred_on': datetime.now(), 
-        'amount': -float(amount),
-        'description': description,
-        'category_id': category_id,
-        'account_id': account_id,
-        'qty': qty,
-        'unit': unit,
+        'household_id': household_id,
+        'amount': amount, # Guardamos siempre en positivo según nuevo esquema
+        'description': text,
+        'category_id': suggestion.get("category_id"),
+        'store_id': suggestion.get("normalized_description") or "Telegram",
+        'occurred_on': datetime.utcnow().isoformat(),
         'status': 'posted',
-        'source': 'telegram',
         'created_by': user_id,
-        'created_at': datetime.now()
+        'bucket': suggestion.get("bucket"),
+        'created_at': datetime.utcnow().isoformat()
     }
     
-    display_desc = f"{description} ({qty}{unit})" if qty and unit else description
-    
-    house_ref.collection('transactions').add(transaction_data)
-    await telegram_service.send_message(
-        chat_id, 
-        f"✅ <b>Gasto guardado</b>:\n📝 {display_desc}\n💰 ${amount:,}", 
-        parse_mode="HTML"
-    )
+    try:
+        supabase.table('transactions').insert(transaction_data).execute()
+        
+        advice = suggestion.get('advice', '')
+        bucket_label = (suggestion.get('bucket') or '').upper()
+        store_name = suggestion.get('normalized_description', 'Gasto')
+        
+        msg = f"✅ <b>Gasto Inteligente Guardado</b>\n"
+        msg += f"🛒 {store_name}\n"
+        msg += f"💰 ${amount:,}\n"
+        if bucket_label:
+            msg += f"🪣 Bucket: {bucket_label}\n"
+        if advice:
+            msg += f"\n💡 <i>{advice}</i>"
+            
+        await telegram_service.send_message(chat_id, msg, parse_mode="HTML")
+        
+    except Exception as e:
+        logger.error(f"Failed to insert telegram transaction to supabase: {e}")
+        await telegram_service.send_message(chat_id, "❌ Error al guardar el gasto en la nueva base de datos.")
 
-async def _handle_callback_query(update: Update, db: Client):
+async def _handle_callback_query(update: Update, db: FirestoreClient):
     """Handle button clicks from inline keyboards"""
     query = update.callback_query
     data = query.data

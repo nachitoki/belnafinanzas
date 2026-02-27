@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from google.cloud.firestore import Client
 from app.core.firebase import get_firestore
 from app.core.auth import get_current_user
-from app.services.ai_advisor import get_advisor, format_context
 from app.services.dashboard_service import DashboardService
 from datetime import datetime
 
@@ -269,12 +268,8 @@ def auto_observations(
             if source_id:
                 existing_source_ids.add(source_id)
 
-        context_text = format_context(summary)
+        context_text = ""
         advisor = None
-        try:
-            advisor = get_advisor()
-        except Exception:
-            advisor = None
 
         created_items = []
         now = datetime.now()
@@ -341,12 +336,8 @@ def auto_patterns(
             if source_id:
                 existing_source_ids.add(source_id)
 
-        context_text = format_context(summary)
+        context_text = ""
         advisor = None
-        try:
-            advisor = get_advisor()
-        except Exception:
-            advisor = None
 
         created_items = []
         now = datetime.now()
@@ -405,9 +396,8 @@ def ask_bitacora(
         except Exception:
             summary = None
 
-        context_text = format_context(summary, extra_context)
-        advisor = get_advisor()
-        answer = advisor.answer(question, context_text)
+        context_text = ""
+        answer = "🤖 La Bitácora Inteligente se está actualizando para conectarse a Supabase. Podrás volver a charlar pronto."
         return {"answer": answer, "context": context_text}
     except HTTPException:
         raise
@@ -437,17 +427,18 @@ def simulate_bitacora(
             summary = DashboardService(db).get_dashboard_summary(user["household_id"])
         except Exception:
             summary = None
-        context_text = format_context(summary, extra_context)
+        context_text = ""
 
-        advisor = get_advisor()
-        simulation = advisor.simulate_idea(
-            title=title,
-            category=category,
-            cost=float(cost) if cost is not None else None,
-            horizon_months=int(horizon_months) if horizon_months is not None else None,
-            tco_total=float(tco_total) if tco_total is not None else None,
-            context=context_text
-        )
+        # Mock simulation for now
+        simulation = {
+            "title": title,
+            "feasibility": "neutral",
+            "impact": "moderate",
+            "monthly_impact": 0,
+            "blindaje_after": 0,
+            "oxigeno_after": 0,
+            "advice": "Simulador temporalmente en mantenimiento Supabase."
+        }
 
         monthly_target = None
         if cost and horizon_months:

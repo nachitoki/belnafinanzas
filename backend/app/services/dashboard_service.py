@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
-from google.cloud.firestore import Client
+from google.cloud.firestore import Client as FirestoreClient
+from supabase import Client as SupabaseClient
 from app.domain.models import Transaction, RecurringItem, ProductPrice, HouseholdSignals, Status
 from app.domain.logic import (
     compute_spending_zone,
@@ -14,8 +15,9 @@ _CACHE = {}
 _CACHE_TTL_SECONDS = 60  # Cache dashboard results for 60 seconds
 
 class DashboardService:
-    def __init__(self, db: Client):
+    def __init__(self, db: FirestoreClient, supabase: SupabaseClient = None):
         self.db = db
+        self.supabase = supabase
 
     def get_dashboard_summary(self, household_id: str) -> Dict[str, Any]:
         now = datetime.utcnow()
@@ -24,60 +26,69 @@ class DashboardService:
             if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return cached["data"]
 
-        # 1. Fetch Collections Concurrent-ish (limit 300 each)
-        # We fetch all core collections once to avoid N queries
+        # Si tenemos Supabase, usamos el motor SQL veloz
+        if self.supabase:
+            return self._get_summary_supabase(household_id, now)
         
-        # A) Transactions
-        start_date_zone = now - timedelta(days=45)
-        month_start = datetime(now.year, now.month, 1)
-        query_start = min(start_date_zone, month_start) - timedelta(days=1)
-        
-        trans_docs = self.db.collection('households').document(household_id)\
-            .collection('transactions')\
-            .where('occurred_on', '>=', query_start)\
-            .limit(300)\
-            .stream()
+        # Fallback a Firestore (Lento)
+        return self._get_summary_firestore(household_id, now)
 
+    def _get_summary_supabase(self, household_id: str, now: datetime) -> Dict[str, Any]:
+        # Una sola consulta relacional para todo (idealmente, pero por tiempo haremos consultas paralelas en Supabase que son 10x más rápidas)
         # B) Commitments
-        comm_docs = self.db.collection('households').document(household_id)\
-            .collection('commitments').limit(200).stream()
-        commitments = [d.to_dict() for d in comm_docs]
-
+        commitments = self.supabase.table("commitments").select("*").eq("household_id", household_id).execute().data
         # C) Events
-        event_docs = self.db.collection('households').document(household_id)\
-            .collection('events').limit(200).stream()
+        events = self.supabase.table("events").select("*").eq("household_id", household_id).execute().data
+        # D) Incomes
+        incomes = self.supabase.table("incomes").select("*").eq("household_id", household_id).execute().data
+        # E) Categories
+        cat_list = self.supabase.table("categories").select("*").eq("household_id", household_id).execute().data
+        cat_map = {c['id']: c for c in cat_list}
+        
+        # A) Transactions (last 45 days)
+        month_start = datetime(now.year, now.month, 1)
+        query_start = (month_start - timedelta(days=45)).isoformat()
+        trans_list = self.supabase.table("transactions").select("*").eq("household_id", household_id).gte("occurred_on", query_start).execute().data
+        
+        return self._process_dashboard_data(household_id, now, trans_list, commitments, events, incomes, cat_map)
+
+    def _get_summary_firestore(self, household_id: str, now: datetime) -> Dict[str, Any]:
+        # Lógica original de Firestore (encapsulada)
+        month_start = datetime(now.year, now.month, 1)
+        query_start = month_start - timedelta(days=45)
+        
+        trans_docs = self.db.collection('households').document(household_id).collection('transactions').where('occurred_on', '>=', query_start).limit(300).stream()
+        comm_docs = self.db.collection('households').document(household_id).collection('commitments').limit(200).stream()
+        event_docs = self.db.collection('households').document(household_id).collection('events').limit(200).stream()
+        income_docs = self.db.collection('households').document(household_id).collection('incomes').limit(200).stream()
+        cats_ref = self.db.collection('households').document(household_id).collection('categories').stream()
+        
+        cat_map = {c.id: c.to_dict() for c in cats_ref}
+        trans_list = [d.to_dict() for d in trans_docs]
+        commitments = [d.to_dict() for d in comm_docs]
         events = [d.to_dict() for d in event_docs]
-
-        # D) Incomes (needed for month overview)
-        income_docs = self.db.collection('households').document(household_id)\
-            .collection('incomes').limit(200).stream()
         incomes = [d.to_dict() for d in income_docs]
+        
+        return self._process_dashboard_data(household_id, now, trans_list, commitments, events, incomes, cat_map)
 
-        # Process Transactions
+    def _process_dashboard_data(self, household_id: str, now: datetime, trans_list: List[Dict], commitments: List[Dict], events: List[Dict], incomes: List[Dict], cat_map: Dict) -> Dict[str, Any]:
+        month_start = datetime(now.year, now.month, 1)
         all_transactions_data = []
         transactions_objects = []
         real_oxigeno = 0.0
         real_vida = 0.0
         real_blindaje = 0.0
-        
-        # Categories Map
-        cats_ref = self.db.collection('households').document(household_id)\
-            .collection('categories').stream()
-        cat_map = {c.id: c.to_dict() for c in cats_ref}
 
-        for doc in trans_docs:
-            data = doc.to_dict()
+        for data in trans_list:
             occurred_on = data.get('occurred_on')
             if hasattr(occurred_on, 'timestamp'):
                 occurred_on = datetime.fromtimestamp(occurred_on.timestamp())
             elif isinstance(occurred_on, str):
                 try:
-                    occurred_on = datetime.fromisoformat(occurred_on)
+                    occurred_on = datetime.fromisoformat(occurred_on.replace('Z', '+00:00'))
                 except:
-                    # Fallback for safe date
                     occurred_on = datetime.utcnow()
             else:
-                 # Fallback if None or other type
                  occurred_on = datetime.utcnow()
             
             data['parsed_date'] = occurred_on
@@ -98,23 +109,19 @@ class DashboardService:
                 ))
 
             if occurred_on >= month_start:
-                amt = float(data.get('amount', 0))
+                try:
+                    amt = float(data.get('amount', 0))
+                except:
+                    amt = 0.0
+
                 if amt < 0:
                     val = abs(amt)
                     cat_id = data.get('category_id')
-                    cat_data = cat_map.get(cat_id, {}) if cat_id else {}
-                    cat_name = (cat_data.get('name') or "").lower()
+                    cat_item = cat_map.get(cat_id, {}) if cat_id else {}
+                    cat_name = (cat_item.get('name') or "").lower()
                     
-                    # Smart Classification Logic
                     desc = (data.get('description') or "").lower()
-                    store = (data.get('store_id') or "").lower() 
                     
-                    def safe_float(v):
-                        try: return float(v)
-                        except: return 0.0
-
-                    val = abs(safe_float(data.get('amount')))
-                    # Utilities, Supermarkets, Health, Education, Telecom
                     oxigeno_keywords = [
                         "supermercado", "jumbo", "lider", "unimarc", "santa isabel", "tottus", "acunta", "mayorista",
                         "cge", "enel", "aguas", "esval", "essbio", "metrogas", "lipigas", "abastible",
@@ -124,11 +131,10 @@ class DashboardService:
                         "arriendo", "gc", "gasto comun", "contribucion"
                     ]
                     
-                    # Keywords for Blindaje (Savings/Debt)
                     blindaje_keywords = ["ahorro", "inversion", "fintual", "racional", "coopeuch", "deposito", "deuda", "credito", "hipotecario"]
                     
                     is_blindaje = "ahorro" in cat_name or "deuda" in cat_name or "inversion" in cat_name or any(k in desc for k in blindaje_keywords)
-                    is_oxigeno = cat_data.get('essential', False) or any(k in desc for k in oxigeno_keywords) or any(k in cat_name for k in oxigeno_keywords)
+                    is_oxigeno = cat_item.get('essential', False) or any(k in desc for k in oxigeno_keywords) or any(k in cat_name for k in oxigeno_keywords)
                     
                     if is_blindaje:
                         real_blindaje += val

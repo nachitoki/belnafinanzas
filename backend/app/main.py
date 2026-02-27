@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.firebase import initialize_firebase
 from app.core.config import settings
-from app.api.routes import receipts, jobs, telegram, dashboard, products, catalog, incomes, commitments, events, alerts, horizon, recipes, shopping_list, bitacora, diagnose, meal_planner
+from app.api.routes import receipts, jobs, telegram, dashboard, products, catalog, incomes, commitments, events, alerts, horizon, recipes, shopping_list, bitacora, diagnose, meal_planner, advisor
 import logging
 
 # Configure logging
@@ -71,6 +71,7 @@ app.include_router(shopping_list.router, prefix="/api", tags=["shopping-list"])
 app.include_router(bitacora.router, prefix="/api", tags=["bitacora"])
 app.include_router(diagnose.router, prefix="/api", tags=["diagnose"])
 app.include_router(meal_planner.router, prefix="/api", tags=["meal_planner"])
+app.include_router(advisor.router, prefix="/api/advisor", tags=["advisor"])
 
 
 if __name__ == "__main__":

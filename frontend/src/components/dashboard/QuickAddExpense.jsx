@@ -1,71 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { createManualReceipt, getExpensePatterns } from '../../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { interpretTransaction, confirmTransaction } from '../../services/api';
 
 const QuickAddExpense = ({ onExpenseAdded }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [store, setStore] = useState('');
-    const [amount, setAmount] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [patterns, setPatterns] = useState([]);
-    const [suggestions, setSuggestions] = useState([]);
+    const [text, setText] = useState('');
+    const [isThinking, setIsThinking] = useState(false);
+    const [suggestion, setSuggestion] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const inputRef = useRef(null);
 
+    // Focus input when opened
     useEffect(() => {
-        // Load patterns for autocomplete
-        const loadPatterns = async () => {
-            try {
-                const data = await getExpensePatterns();
-                setPatterns(data || []);
-            } catch (e) {
-                console.error("Failed to load patterns", e);
-            }
-        };
-        loadPatterns();
-    }, []);
+        if (isOpen && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [isOpen]);
 
-    const handleStoreChange = (e) => {
-        const val = e.target.value;
-        setStore(val);
-        if (val.length > 1) {
-            const matches = patterns.filter(p =>
-                p.store_name && p.store_name.toLowerCase().includes(val.toLowerCase())
-            ).slice(0, 5);
-            setSuggestions(matches);
-        } else {
-            setSuggestions([]);
+    const handleInterpret = async (e) => {
+        e.preventDefault();
+        if (!text.trim()) return;
+
+        setIsThinking(true);
+        setSuggestion(null);
+        try {
+            const res = await interpretTransaction(text);
+            setSuggestion(res);
+        } catch (error) {
+            console.error(error);
+            alert("El Asesor no pudo entender. Vuelve a intentar.");
+        } finally {
+            setIsThinking(false);
         }
     };
 
-    const selectSuggestion = (s) => {
-        setStore(s.store_name);
-        setSuggestions([]);
-        // Optional: Auto-fill typical amount? Maybe not, too risky.
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!store || !amount) return;
-
-        setIsSubmitting(true);
+    const handleConfirm = async () => {
+        if (!suggestion) return;
+        setIsSaving(true);
         try {
-            await createManualReceipt({
-                store_name: store,
-                total: parseInt(amount),
-                date: date,
-                category_id: null // Let backend guess or default
+            // Mapping suggestion to transaction schema
+            await confirmTransaction({
+                amount: parseInt(suggestion.amount_hint) || 0,
+                description: text,
+                store_id: suggestion.normalized_description || "Desconocido",
+                category_id: suggestion.category_id,
+                bucket: suggestion.bucket // Note: handled purely purely by AI classification, very nice
             });
 
-            // Reset and close
-            setStore('');
-            setAmount('');
+            // Re-fetch dashboard
+            setText('');
+            setSuggestion(null);
             setIsOpen(false);
             if (onExpenseAdded) onExpenseAdded();
         } catch (error) {
             console.error(error);
-            alert("Error al guardar gasto");
+            alert("Error al guardar en el motor.");
         } finally {
-            setIsSubmitting(false);
+            setIsSaving(false);
         }
+    };
+
+    const handleCancel = () => {
+        setText('');
+        setSuggestion(null);
+        setIsOpen(false);
     };
 
     if (!isOpen) {
@@ -74,7 +71,7 @@ const QuickAddExpense = ({ onExpenseAdded }) => {
                 onClick={() => setIsOpen(true)}
                 style={{
                     position: 'fixed',
-                    bottom: '80px', // Above bottom nav if any, or just float
+                    bottom: '80px',
                     right: '20px',
                     background: 'var(--primary-main)',
                     color: 'white',
@@ -83,15 +80,16 @@ const QuickAddExpense = ({ onExpenseAdded }) => {
                     borderRadius: '50%',
                     border: 'none',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                    fontSize: '2rem',
+                    fontSize: '1.5rem',
                     cursor: 'pointer',
                     zIndex: 100,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    transition: 'transform 0.2s'
                 }}
             >
-                +
+                ✨
             </button>
         );
     }
@@ -99,84 +97,103 @@ const QuickAddExpense = ({ onExpenseAdded }) => {
     return (
         <div style={{
             position: 'fixed',
-            bottom: '80px',
-            right: '20px',
-            background: 'var(--bg-card)',
-            padding: '16px',
-            borderRadius: '16px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-            zIndex: 101,
-            width: '300px',
-            border: '1px solid var(--border-light)'
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
         }}>
-            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '1rem' }}>Agregar Gasto Rápido</h3>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ position: 'relative' }}>
-                    <input
-                        type="text"
-                        placeholder="¿Dónde compraste?"
-                        value={store}
-                        onChange={handleStoreChange}
-                        style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #ccc' }}
-                        autoFocus
-                    />
-                    {suggestions.length > 0 && (
-                        <div style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            right: 0,
-                            background: 'white',
-                            border: '1px solid #eee',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                            zIndex: 10
-                        }}>
-                            {suggestions.map((s, i) => (
-                                <div
-                                    key={i}
-                                    onClick={() => selectSuggestion(s)}
-                                    style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
-                                >
-                                    {s.store_name}
-                                </div>
-                            ))}
+            <div style={{
+                background: 'var(--bg-card, white)',
+                padding: '24px',
+                borderRadius: '24px',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                width: '100%',
+                maxWidth: '400px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                color: 'black'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>Asesor Inteligente ✨</h3>
+                    <button onClick={handleCancel} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+                </div>
+
+                {!suggestion ? (
+                    <form onSubmit={handleInterpret} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>Escribe el gasto como le hablarías a Ana:</p>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            placeholder="Ej: Jumbo 45 lucas pan y leche"
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                            style={{
+                                width: '100%', padding: '16px', borderRadius: '12px',
+                                border: '2px solid var(--primary-main)', outline: 'none',
+                                fontSize: '1rem', boxSizing: 'border-box'
+                            }}
+                            disabled={isThinking}
+                        />
+                        <button
+                            type="submit"
+                            disabled={isThinking || !text.trim()}
+                            style={{
+                                padding: '16px', borderRadius: '12px', border: 'none',
+                                background: 'var(--primary-main)', color: 'white',
+                                cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem',
+                                opacity: (isThinking || !text.trim()) ? 0.7 : 1
+                            }}
+                        >
+                            {isThinking ? 'Pensando...' : 'Analizar'}
+                        </button>
+                    </form>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ background: '#f8f9fa', padding: '16px', borderRadius: '12px', border: '1px solid #eee' }}>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Interpretación:</p>
+                            <h4 style={{ margin: '0 0 4px 0', fontSize: '1.2rem' }}>{suggestion.normalized_description}</h4>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--primary-main)' }}>
+                                ${parseInt(suggestion.amount_hint || 0).toLocaleString('es-CL')}
+                            </p>
+
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ background: '#e3f2fd', color: '#1565c0', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                    {suggestion.bucket?.toUpperCase()}
+                                </span>
+                            </div>
                         </div>
-                    )}
-                </div>
 
-                <input
-                    type="number"
-                    placeholder="Monto ($)"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #ccc' }}
-                />
+                        {suggestion.advice && (
+                            <div style={{ background: '#fff3e0', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ff9800' }}>
+                                <p style={{ margin: 0, fontSize: '0.9rem', color: '#e65100', fontStyle: 'italic' }}>
+                                    💡 {suggestion.advice}
+                                </p>
+                            </div>
+                        )}
 
-                <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #ccc' }}
-                />
-
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                    <button
-                        type="button"
-                        onClick={() => setIsOpen(false)}
-                        style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'transparent', cursor: 'pointer' }}
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: 'var(--primary-main)', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
-                    >
-                        {isSubmitting ? '...' : 'Guardar'}
-                    </button>
-                </div>
-            </form>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                onClick={() => setSuggestion(null)}
+                                style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '2px solid #ccc', background: 'transparent', cursor: 'pointer', fontWeight: 'bold' }}
+                                disabled={isSaving}
+                            >
+                                Corregir
+                            </button>
+                            <button
+                                onClick={handleConfirm}
+                                disabled={isSaving}
+                                style={{ flex: 2, padding: '12px', borderRadius: '12px', border: 'none', background: '#4caf50', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}
+                            >
+                                {isSaving ? 'Guardando...' : 'Confirmar 👍'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
