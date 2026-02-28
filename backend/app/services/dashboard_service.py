@@ -40,7 +40,12 @@ class DashboardService:
 
         # Si tenemos Supabase, usamos el motor SQL veloz
         if self.supabase:
-            result = self._get_summary_supabase(household_id, target_date)
+            try:
+                result = self._get_summary_supabase(household_id, target_date)
+            except Exception as e:
+                from loguru import logger
+                logger.error(f"Supabase dashboard failed, falling back to Firestore: {e}")
+                result = self._get_summary_firestore(household_id, target_date)
         else:
             # Fallback a Firestore (Lento)
             result = self._get_summary_firestore(household_id, target_date)
@@ -87,6 +92,7 @@ class DashboardService:
         return self._process_dashboard_data(household_id, target_date, trans_list, commitments, events, incomes, cat_map)
 
     def _process_dashboard_data(self, household_id: str, target_date: datetime, trans_list: List[Dict], commitments: List[Dict], events: List[Dict], incomes: List[Dict], cat_map: Dict) -> Dict[str, Any]:
+        now = datetime.utcnow()
         month_start = datetime(target_date.year, target_date.month, 1)
         all_transactions_data = []
         transactions_objects = []
@@ -239,7 +245,7 @@ class DashboardService:
 
         # 6. Real Distribution Result
         month_overview = self._compute_month_overview_memory(
-            incomes, commitments, events, household_id, now, months_ahead=3
+            incomes, commitments, events, household_id, target_date, months_ahead=3
         )
         total_income = month_overview.get('income_total', 0)
         
@@ -417,15 +423,23 @@ class DashboardService:
             target_month_str = month_key(month_start)
             
             if freq == "monthly":
-                # ONLY count if it belongs to this month or has no specific month (legacy)
+                # Count if it matches target month OR if it has NO doc_month (legacy perpetual)
                 if not doc_month or doc_month == target_month_str:
                     incomes_total += amt
             elif freq == "weekly": 
-                incomes_total += amt * 4
+                if not doc_month or doc_month == target_month_str:
+                    incomes_total += amt * 4
             elif freq == "biweekly": 
-                incomes_total += amt * 2
-            elif freq in ["one_time", "yearly"] and nd and month_start.date() <= nd < (month_start+timedelta(days=31)).date():
-                incomes_total += amt
+                if not doc_month or doc_month == target_month_str:
+                    incomes_total += amt * 2
+            elif freq in ["one_time", "yearly"]:
+                # For one_time/yearly, it MUST match the target month exactly
+                # If doc_month is set, use it. Otherwise, use next_date.
+                if doc_month:
+                    if doc_month == target_month_str:
+                        incomes_total += amt
+                elif nd and month_start.date() <= nd < (month_start+timedelta(days=31)).date():
+                    incomes_total += amt
         incomes_total += projected_variable_total(month_key(month_start))
 
         for d in commitments:

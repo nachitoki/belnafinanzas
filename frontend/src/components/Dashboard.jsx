@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getDashboardSummary, getBitacora } from '../services/api';
 import HouseholdStatusCard from './dashboard/HouseholdStatusCard';
 import MonthOverview from './dashboard/MonthOverview';
@@ -18,7 +18,7 @@ const Dashboard = () => {
     const [projectLoading, setProjectLoading] = useState(true);
     const retryRef = useRef(false);
 
-    // Month Selection
+    const [searchParams, setSearchParams] = useSearchParams();
     const currentMonthStr = new Date().toISOString().slice(0, 7);
     const getNextMonthStr = () => {
         const d = new Date();
@@ -26,7 +26,13 @@ const Dashboard = () => {
         return d.toISOString().slice(0, 7);
     };
     const nextMonthStr = getNextMonthStr();
-    const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+    const selectedMonth = searchParams.get('month') || currentMonthStr;
+
+    const setSelectedMonth = (m) => {
+        const newParams = new URLSearchParams(searchParams);
+        newParams.set('month', m);
+        setSearchParams(newParams);
+    };
 
     // Refs for scrolling
     const statusRef = useRef(null);
@@ -61,8 +67,11 @@ const Dashboard = () => {
     }, [selectedMonth]);
 
     useEffect(() => {
-        fetchData();
+        setLoading(true);
+        fetchData(selectedMonth);
+    }, [selectedMonth, fetchData]);
 
+    useEffect(() => {
         // Load Project logic
         const loadProject = async () => {
             setProjectLoading(true);

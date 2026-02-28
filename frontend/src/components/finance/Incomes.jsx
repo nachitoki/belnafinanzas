@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getIncomes, createIncome, updateIncome, deleteIncome, getBitacora, askBitacora, getCommitments, getEvents } from '../../services/api';
 import PillTabs from '../layout/PillTabs';
 import { loadDistributionMeta } from '../../utils/distributionMeta';
@@ -20,9 +20,27 @@ const Incomes = () => {
     const [editForm, setEditForm] = useState({});
     const [activeTab, setActiveTab] = useState('ingresos');
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    // Month Selection
+    const [searchParams, setSearchParams] = useSearchParams();
+    const currentDayStr = new Date().toISOString().slice(0, 7);
+    const getNextMonthStr = () => {
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        return d.toISOString().slice(0, 7);
+    };
+    const nextMonthStr = getNextMonthStr();
+    const currentMonth = searchParams.get('month') || currentDayStr;
+
+    const setSelectedMonth = (m) => {
+        const newParams = new URLSearchParams(searchParams);
+        newParams.set('month', m);
+        setSearchParams(newParams);
+    };
     const totalFixedMonthly = incomes.reduce((sum, inc) => {
         if (inc.is_variable) return sum;
+        // Filter by month if specified
+        if (inc.month && inc.month !== currentMonth) return sum;
+
         const amt = Number(inc.amount || 0);
         if (inc.frequency === 'weekly') return sum + amt * 4;
         if (inc.frequency === 'biweekly') return sum + amt * 2;
@@ -32,8 +50,10 @@ const Incomes = () => {
 
     const oneTimeThisMonth = incomes.reduce((sum, inc) => {
         if (inc.is_variable || inc.frequency !== 'one_time') return sum;
-        const created = inc.created_at ? inc.created_at.slice(0, 7) : '';
-        if (created === currentMonth) return sum + Number(inc.amount || 0);
+
+        // Priority: Use .month field if exists, then fallback to created_at
+        const m = inc.month || (inc.created_at ? inc.created_at.slice(0, 7) : '');
+        if (m === currentMonth) return sum + Number(inc.amount || 0);
         return sum;
     }, 0);
 
@@ -317,7 +337,7 @@ const Incomes = () => {
         if (activeTab !== 'distribucion') return;
         import('../../services/api').then(api => {
             if (api.getDashboardSummary) {
-                api.getDashboardSummary().then(data => {
+                api.getDashboardSummary(currentMonth).then(data => {
                     if (data && data.distribution_real) {
                         setDistributionReal(data.distribution_real);
                     }
@@ -398,7 +418,40 @@ const Incomes = () => {
                     { label: 'Distribución', path: '/incomes?tab=distribucion', icon: '\uD83C\uDF69' }
                 ]}
             />
-            {/* Headers and other tabs omitted for brevity in replacement... */}
+
+            {/* Month Selector for Planner Mode */}
+            <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '12px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e2e8f0', marginTop: '10px' }}>
+                <span style={{ fontSize: '0.9rem', color: '#475569', fontWeight: '800', textTransform: 'capitalize' }}>
+                    {(() => {
+                        const [y, m] = currentMonth.split('-');
+                        return new Date(y, parseInt(m) - 1, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+                    })()}
+                </span>
+                <div style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', gap: '4px' }}>
+                    <button
+                        onClick={() => setSelectedMonth(currentDayStr)}
+                        style={{
+                            padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600',
+                            background: currentMonth === currentDayStr ? '#fff' : 'transparent',
+                            color: currentMonth === currentDayStr ? 'var(--status-blue-main)' : '#64748b',
+                            boxShadow: currentMonth === currentDayStr ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                    >
+                        Este Mes
+                    </button>
+                    <button
+                        onClick={() => setSelectedMonth(nextMonthStr)}
+                        style={{
+                            padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600',
+                            background: currentMonth === nextMonthStr ? '#fff' : 'transparent',
+                            color: currentMonth === nextMonthStr ? 'var(--status-blue-main)' : '#64748b',
+                            boxShadow: currentMonth === nextMonthStr ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                    >
+                        Siguiente
+                    </button>
+                </div>
+            </div>
 
             {activeTab === 'distribucion' && (
                 <>
@@ -648,7 +701,12 @@ const Incomes = () => {
             ) : activeTab !== 'distribucion' && incomes.length === 0 ? (
                 <div className="loading-text">Sin ingresos aun.</div>
             ) : activeTab !== 'distribucion' ? (
-                incomes.map((inc) => (
+                incomes.filter(inc => {
+                    if (inc.is_variable) return inc.month === currentMonth;
+                    if (inc.month) return inc.month === currentMonth;
+                    // For monthly perpetual, usually no month field
+                    return true;
+                }).map((inc) => (
                     <div key={inc.id} className="spending-card">
                         {editingId === inc.id ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

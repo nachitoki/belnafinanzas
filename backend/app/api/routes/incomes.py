@@ -39,7 +39,7 @@ def list_incomes(
                 "month": data.get("month"),
                 "min_amount": data.get("min_amount"),
                 "next_date": data.get("next_date"),
-                "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
+                "created_at": data.get("created_at").isoformat() if hasattr(data.get("created_at"), "isoformat") else (data.get("created_at") or "")
             })
         _CACHE[household_id] = {"ts": now, "data": results}
         return results

@@ -4,6 +4,7 @@ from app.core.firebase import get_firestore
 from app.core.auth import get_current_user
 from datetime import datetime, timedelta, date
 from typing import Optional
+import traceback
 
 router = APIRouter()
 _CACHE = {}
@@ -22,6 +23,8 @@ def list_commitments(
         if cached and cached.get("ts") and cached.get("data"):
             if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return cached["data"]
+        
+        print(f"DEBUG: Fetching commitments for {household_id} from Firestore")
         docs = db.collection("households").document(household_id)\
             .collection("commitments")\
             .limit(200)\
@@ -30,19 +33,30 @@ def list_commitments(
         results = []
         for doc in docs:
             data = doc.to_dict()
-            results.append({
-                "id": doc.id,
-                "name": data.get("name"),
-                "amount": data.get("amount"),
-                "frequency": data.get("frequency", "monthly"),
-                "flow_category": data.get("flow_category"),
-                "next_date": data.get("next_date"),
-                "installments_total": data.get("installments_total", 0),
-                "installments_paid": data.get("installments_paid", 0),
-                "is_variable": data.get("is_variable", False),
-                "last_paid_at": data.get("last_paid_at"),
-                "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
-            })
+            try:
+                # Robust created_at
+                created_at_raw = data.get("created_at")
+                if hasattr(created_at_raw, "isoformat"):
+                    created_at = created_at_raw.isoformat()
+                else:
+                    created_at = str(created_at_raw or "")
+
+                results.append({
+                    "id": doc.id,
+                    "name": data.get("name"),
+                    "amount": data.get("amount"),
+                    "frequency": data.get("frequency", "monthly"),
+                    "flow_category": data.get("flow_category"),
+                    "next_date": data.get("next_date"),
+                    "installments_total": data.get("installments_total", 0),
+                    "installments_paid": data.get("installments_paid", 0),
+                    "is_variable": data.get("is_variable", False),
+                    "last_paid_at": data.get("last_paid_at"),
+                    "created_at": created_at
+                })
+            except Exception as item_err:
+                print(f"DEBUG: Error processing item {doc.id}: {item_err}")
+                continue
         
         # Synthetic Commitments Logic
         try:
@@ -77,18 +91,10 @@ def list_commitments(
             compra_grande_total = meals_total + extras_total
 
             if not has_real_shopping:
-                # If no real commitment exists, we show the "Total Compra Grande" as the main one
-                # and "Almuerzos Planificados" with amount 0 or just as a label to avoid double summing
-                # BUT the user said "se suma", so let's only provide the breakdown if it makes sense.
-                
-                # To avoid double summing in "Alimentación" group:
-                # We'll show "Almuerzos Planificados" but with 0 amount for calculation purposes,
-                # putting the full weight on "Total Compra Grande".
-                
                 results.append({
                     "id": "synthetic_meals",
                     "name": "Almuerzos Planificados",
-                    "amount": 0, # Set to 0 to avoid double counting in totals
+                    "amount": 0,
                     "frequency": "monthly",
                     "flow_category": "structural",
                     "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
@@ -113,8 +119,6 @@ def list_commitments(
                     "description": f"Almuerzos: ${meals_total:,} + Despensa: ${extras_total:,}"
                 })
             else:
-                # If a real shopping commitment exists (e.g. user added "Jumbo $500k"),
-                # we only add "Almuerzos Planificados" as an info card with $0 to avoid double counting.
                 results.append({
                     "id": "synthetic_meals_info",
                     "name": "Almuerzos Planificados (Info)",
@@ -129,13 +133,16 @@ def list_commitments(
                     "description": f"Costo estimado de recetas: ${meals_total:,}. Ya incluido en tu presupuesto de compra."
                 })
 
-        except Exception as e:
-            print(f"Error calculating synthetic meals: {e}")
+        except Exception as synth_err:
+            print(f"DEBUG: Error calculating synthetic meals: {synth_err}")
+            traceback.print_exc()
 
         _CACHE[household_id] = {"ts": now, "data": results}
         return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as global_err:
+        print(f"DEBUG: Global error in list_commitments: {global_err}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(global_err))
 
 
 @router.post("/commitments")
@@ -198,7 +205,9 @@ def _add_months(source: date, months: int) -> date:
     month = source.month - 1 + months
     year = source.year + month // 12
     month = month % 12 + 1
-    day = min(source.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+    import calendar
+    _, last_day = calendar.monthrange(year, month)
+    day = min(source.day, last_day)
     return date(year, month, day)
 
 
@@ -222,15 +231,10 @@ def update_commitment(
 
         action = payload.get("action")
         if action == "pay":
-            # Logic for paying an installment or the periodic cycle
-            # We record a transaction and advance the next_date
-            
-            # Use provided paid_amount for the transaction, or fallback to the commitment's default amount
-            transaction_amount = float(payload.get("paid_amount")) if payload.get("paid_amount") is not None else float(doc.to_dict().get("amount", 0))
+            transaction_amount = float(payload.get("paid_amount")) if payload.get("paid_amount") is not None else float(data.get("amount", 0))
 
             updates["last_paid_at"] = datetime.now().isoformat()
             
-            # Recalculate next date
             current_next = data.get("next_date")
             freq = data.get("frequency", "monthly")
 
@@ -252,21 +256,19 @@ def update_commitment(
                  except Exception:
                      pass
             
-            # If it has installments, increment paid count
             if data.get("installments_total", 0) > 0:
                 paid = data.get("installments_paid", 0) + 1
                 updates["installments_paid"] = paid
                 if paid >= data.get("installments_total"):
                      updates["status"] = "completed"
 
-            # Create Transaction
             try:
                 transaction_data = {
                     "occurred_on": datetime.now(), 
-                    "amount": -abs(transaction_amount), # Use the variable amount determined above
+                    "amount": -abs(transaction_amount),
                     "description": f"Pago de {data.get('name')}",
                     "category_id": data.get("flow_category") or "compromisos",
-                    "account_id": "default", # MVP
+                    "account_id": "default",
                     "status": "posted",
                     "source": "commitment",
                     "commitment_id": commitment_id,
@@ -274,8 +276,7 @@ def update_commitment(
                 }
                 db.collection("households").document(household_id).collection("transactions").add(transaction_data)
             except Exception as e:
-                print(f"Error creating transaction for commitment: {e}")
-                # Don't fail the update if transaction creation fails, but log it
+                print(f"Error creating transaction: {e}")
 
         elif action == "postpone":
             postpone_value = payload.get("postpone_days")
@@ -290,7 +291,6 @@ def update_commitment(
                 if days > 0:
                     updates["next_date"] = (current_date + timedelta(days=days)).isoformat()
 
-        # Direct field updates (optional)
         for key in ["name", "amount", "frequency", "next_date", "flow_category", "installments_total", "installments_paid", "is_variable"]:
             if key in payload and payload[key] is not None:
                 if key == "is_variable":

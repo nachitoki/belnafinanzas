@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.firebase import get_firestore
 from app.core.supabase import get_supabase

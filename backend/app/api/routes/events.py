@@ -38,7 +38,7 @@ def list_events(
                 "date": data.get("date"),
                 "is_mandatory": data.get("is_mandatory", False),
                 "flow_category": data.get("flow_category"),
-                "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
+                "created_at": data.get("created_at").isoformat() if hasattr(data.get("created_at"), "isoformat") else (data.get("created_at") or "")
             })
         _CACHE[household_id] = {"ts": now, "data": results}
         return results

@@ -7,11 +7,32 @@ const PillTabs = ({ items }) => {
     const containerRef = useRef(null);
     const buttonRefs = useRef({});
 
-    const isActive = (path) => {
-        if (path.includes('?')) {
-            return `${location.pathname}${location.search}` === path;
+    const getModifiedPath = (path) => {
+        const currentParams = new URLSearchParams(location.search);
+        const month = currentParams.get('month');
+        if (!month) return path;
+
+        const targetUrl = new URL(path, window.location.origin);
+        if (!targetUrl.searchParams.has('month')) {
+            targetUrl.searchParams.set('month', month);
         }
-        return location.pathname === path;
+        return `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+    };
+
+    const isActive = (path) => {
+        const currentMonth = new URLSearchParams(location.search).get('month');
+        const targetUrl = new URL(path, window.location.origin);
+        const targetMonth = targetUrl.searchParams.get('month');
+
+        // If target doesn't specify month, but we have one in state, it's considered a match if path/other params match
+        const pathnameMatch = location.pathname === targetUrl.pathname;
+
+        // Tab param match
+        const currentTab = new URLSearchParams(location.search).get('tab');
+        const targetTab = targetUrl.searchParams.get('tab');
+        const tabMatch = currentTab === targetTab;
+
+        return pathnameMatch && tabMatch;
     };
 
     useEffect(() => {
@@ -48,7 +69,7 @@ const PillTabs = ({ items }) => {
                             buttonRefs.current[item.path] = node;
                         }
                     }}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => navigate(getModifiedPath(item.path))}
                     style={{
                         border: '1px solid #E2E8F0',
                         background: isActive(item.path) ? '#fff' : 'transparent',
