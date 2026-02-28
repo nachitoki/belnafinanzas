@@ -10,6 +10,7 @@ router = APIRouter()
 
 @router.get("/summary")
 def get_dashboard_summary(
+    month: Optional[str] = None,
     user: dict = Depends(get_current_user),
     db: FirestoreClient = Depends(get_firestore),
     supabase: SupabaseClient = Depends(get_supabase)
@@ -22,7 +23,7 @@ def get_dashboard_summary(
     """
     try:
         service = DashboardService(db, supabase)
-        return service.get_dashboard_summary(user['household_id'])
+        return service.get_dashboard_summary(user['household_id'], month=month)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

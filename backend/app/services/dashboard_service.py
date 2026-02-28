@@ -19,21 +19,36 @@ class DashboardService:
         self.db = db
         self.supabase = supabase
 
-    def get_dashboard_summary(self, household_id: str) -> Dict[str, Any]:
+    def get_dashboard_summary(self, household_id: str, month: str = None) -> Dict[str, Any]:
         now = datetime.utcnow()
-        cached = _CACHE.get(household_id)
+        
+        # Cache key depends on the month
+        cache_key = f"{household_id}_{month}" if month else household_id
+        cached = _CACHE.get(cache_key)
+        
         if cached and cached.get("ts") and cached.get("data"):
             if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return cached["data"]
 
+        target_date = now
+        if month:
+            try:
+                # Expecting YYYY-MM
+                target_date = datetime.strptime(month, "%Y-%m")
+            except:
+                pass
+
         # Si tenemos Supabase, usamos el motor SQL veloz
         if self.supabase:
-            return self._get_summary_supabase(household_id, now)
+            result = self._get_summary_supabase(household_id, target_date)
+        else:
+            # Fallback a Firestore (Lento)
+            result = self._get_summary_firestore(household_id, target_date)
         
-        # Fallback a Firestore (Lento)
-        return self._get_summary_firestore(household_id, now)
+        _CACHE[cache_key] = {"ts": now, "data": result}
+        return result
 
-    def _get_summary_supabase(self, household_id: str, now: datetime) -> Dict[str, Any]:
+    def _get_summary_supabase(self, household_id: str, target_date: datetime) -> Dict[str, Any]:
         # Una sola consulta relacional para todo (idealmente, pero por tiempo haremos consultas paralelas en Supabase que son 10x más rápidas)
         # B) Commitments
         commitments = self.supabase.table("commitments").select("*").eq("household_id", household_id).execute().data
@@ -45,16 +60,16 @@ class DashboardService:
         cat_list = self.supabase.table("categories").select("*").eq("household_id", household_id).execute().data
         cat_map = {c['id']: c for c in cat_list}
         
-        # A) Transactions (last 45 days)
-        month_start = datetime(now.year, now.month, 1)
+        # A) Transactions (last 45 days relative to target_date)
+        month_start = datetime(target_date.year, target_date.month, 1)
         query_start = (month_start - timedelta(days=45)).isoformat()
         trans_list = self.supabase.table("transactions").select("*").eq("household_id", household_id).gte("occurred_on", query_start).execute().data
         
-        return self._process_dashboard_data(household_id, now, trans_list, commitments, events, incomes, cat_map)
+        return self._process_dashboard_data(household_id, target_date, trans_list, commitments, events, incomes, cat_map)
 
-    def _get_summary_firestore(self, household_id: str, now: datetime) -> Dict[str, Any]:
+    def _get_summary_firestore(self, household_id: str, target_date: datetime) -> Dict[str, Any]:
         # Lógica original de Firestore (encapsulada)
-        month_start = datetime(now.year, now.month, 1)
+        month_start = datetime(target_date.year, target_date.month, 1)
         query_start = month_start - timedelta(days=45)
         
         trans_docs = self.db.collection('households').document(household_id).collection('transactions').where('occurred_on', '>=', query_start).limit(300).stream()
@@ -69,10 +84,10 @@ class DashboardService:
         events = [d.to_dict() for d in event_docs]
         incomes = [d.to_dict() for d in income_docs]
         
-        return self._process_dashboard_data(household_id, now, trans_list, commitments, events, incomes, cat_map)
+        return self._process_dashboard_data(household_id, target_date, trans_list, commitments, events, incomes, cat_map)
 
-    def _process_dashboard_data(self, household_id: str, now: datetime, trans_list: List[Dict], commitments: List[Dict], events: List[Dict], incomes: List[Dict], cat_map: Dict) -> Dict[str, Any]:
-        month_start = datetime(now.year, now.month, 1)
+    def _process_dashboard_data(self, household_id: str, target_date: datetime, trans_list: List[Dict], commitments: List[Dict], events: List[Dict], incomes: List[Dict], cat_map: Dict) -> Dict[str, Any]:
+        month_start = datetime(target_date.year, target_date.month, 1)
         all_transactions_data = []
         transactions_objects = []
         real_oxigeno = 0.0
@@ -337,7 +352,6 @@ class DashboardService:
                 "progress": min(100, round((food_spent / food_budget_limit) * 100)) if food_budget_limit > 0 else 0
             }
         }
-        _CACHE[household_id] = {"ts": now, "data": result}
         return result
 
     def update_settings(self, household_id: str, updates: Dict[str, Any]) -> None:

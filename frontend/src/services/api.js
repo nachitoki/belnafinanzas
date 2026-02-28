@@ -81,9 +81,10 @@ export const createManualReceipt = async (payload) => {
     } catch (error) { throw error; }
 };
 
-export const getDashboardSummary = async () => {
+export const getDashboardSummary = async (month) => {
     try {
         const response = await axios.get(`${API_URL}/dashboard/summary`, {
+            params: month ? { month } : undefined,
             timeout: REQUEST_TIMEOUT_MS,
         });
         return response.data;

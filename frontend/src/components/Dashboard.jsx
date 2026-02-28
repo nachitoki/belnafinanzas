@@ -18,6 +18,16 @@ const Dashboard = () => {
     const [projectLoading, setProjectLoading] = useState(true);
     const retryRef = useRef(false);
 
+    // Month Selection
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const getNextMonthStr = () => {
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        return d.toISOString().slice(0, 7);
+    };
+    const nextMonthStr = getNextMonthStr();
+    const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+
     // Refs for scrolling
     const statusRef = useRef(null);
     const horizonRef = useRef(null);
@@ -27,12 +37,12 @@ const Dashboard = () => {
 
     const [errorMsg, setErrorMsg] = useState(null);
 
-    const fetchData = React.useCallback(async (isRetry = false) => {
+    const fetchData = React.useCallback(async (m = selectedMonth, isRetry = false) => {
         try {
             setErrorMsg(null);
-            const result = await getDashboardSummary();
+            const result = await getDashboardSummary(m);
             setData(result);
-            window.localStorage.setItem('dashboard_cache_v1', JSON.stringify({ ts: Date.now(), data: result }));
+            window.localStorage.setItem(`dashboard_cache_${m}`, JSON.stringify({ ts: Date.now(), data: result }));
             retryRef.current = false;
         } catch (e) {
             console.error('Dashboard fetch failed', e);
@@ -43,12 +53,12 @@ const Dashboard = () => {
 
             if (!isRetry && !retryRef.current) {
                 retryRef.current = true;
-                setTimeout(() => fetchData(true), 2000);
+                setTimeout(() => fetchData(m, true), 2000);
             }
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedMonth]);
 
     useEffect(() => {
         fetchData();
@@ -148,9 +158,40 @@ const Dashboard = () => {
             />
 
             {/* Header */}
-            <div style={{ marginBottom: '24px', marginTop: '10px' }}>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-text-main)' }}>Estado del Hogar</h2>
-                <small style={{ color: 'var(--color-text-dim)', fontSize: '0.9rem' }}>Semana actual</small>
+            <div style={{ marginBottom: '24px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-text-main)', margin: 0 }}>Estado del Hogar</h2>
+                    <small style={{ color: 'var(--color-text-dim)', fontSize: '0.9rem', textTransform: 'capitalize' }}>
+                        {(() => {
+                            const [y, m] = selectedMonth.split('-');
+                            return new Date(y, parseInt(m) - 1, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+                        })()}
+                    </small>
+                </div>
+                <div style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', gap: '4px' }}>
+                    <button
+                        onClick={() => { setSelectedMonth(currentMonthStr); setLoading(true); fetchData(currentMonthStr); }}
+                        style={{
+                            padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600',
+                            background: selectedMonth === currentMonthStr ? '#fff' : 'transparent',
+                            color: selectedMonth === currentMonthStr ? 'var(--status-blue-main)' : '#64748b',
+                            boxShadow: selectedMonth === currentMonthStr ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                    >
+                        Este Mes
+                    </button>
+                    <button
+                        onClick={() => { setSelectedMonth(nextMonthStr); setLoading(true); fetchData(nextMonthStr); }}
+                        style={{
+                            padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600',
+                            background: selectedMonth === nextMonthStr ? '#fff' : 'transparent',
+                            color: selectedMonth === nextMonthStr ? 'var(--status-blue-main)' : '#64748b',
+                            boxShadow: selectedMonth === nextMonthStr ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                    >
+                        Siguiente
+                    </button>
+                </div>
             </div>
 
             {/* Components in order */}
