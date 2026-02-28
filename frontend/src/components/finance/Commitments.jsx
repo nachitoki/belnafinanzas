@@ -266,7 +266,7 @@ const Commitments = () => {
                         <option value="discretionary">Discrecional/Deuda</option>
                     </select>
                 </div>
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
                         <input type="checkbox" checked={isVariable} onChange={(e) => setIsVariable(e.target.checked)} />
                         Monto variable
@@ -276,6 +276,24 @@ const Commitments = () => {
                         Cuotas
                     </label>
                 </div>
+                {hasInstallments && (
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        <input
+                            value={installmentsPaid}
+                            onChange={(e) => setInstallmentsPaid(e.target.value)}
+                            placeholder="Cuota actual"
+                            type="number"
+                            style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                        />
+                        <input
+                            value={installmentsTotal}
+                            onChange={(e) => setInstallmentsTotal(e.target.value)}
+                            placeholder="Total cuotas"
+                            type="number"
+                            style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                        />
+                    </div>
+                )}
                 <button
                     onClick={handleSave}
                     disabled={saving}
@@ -381,7 +399,14 @@ const Commitments = () => {
                                                                 {oxygen && <span style={{ fontSize: '0.55rem', background: '#EFF6FF', color: '#1E40AF', padding: '1px 4px', borderRadius: '4px', fontWeight: '900' }}>OXÍGENO</span>}
                                                                 {c.frequency === 'monthly' && <span>🔄</span>}
                                                             </div>
-                                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>{c.next_date} · {c.frequency}</div>
+                                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
+                                                                {c.next_date} · {c.frequency}
+                                                                {c.installments_total > 0 && (
+                                                                    <span style={{ marginLeft: '8px', color: 'var(--status-blue-main)', fontWeight: '700' }}>
+                                                                        Cuota {c.installments_paid}/{c.installments_total}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <div style={{ textAlign: 'right' }}>
                                                             <div style={{ fontWeight: '800' }}>${Math.round(c.amount).toLocaleString('es-CL')}</div>
@@ -428,7 +453,12 @@ const Commitments = () => {
                                     <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>Próximos Meses ({future.length})</div>
                                     {future.map(c => (
                                         <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'white', borderRadius: '8px', marginBottom: '4px', border: '1px solid #f1f5f9' }}>
-                                            <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{c.name}</span>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '0.8rem', fontWeight: '600' }}>{c.name}</div>
+                                                {c.installments_total > 0 && (
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--status-blue-main)' }}>Cuota {c.installments_paid}/{c.installments_total}</div>
+                                                )}
+                                            </div>
                                             <span style={{ fontSize: '0.8rem', color: '#64748b' }}>${Math.round(c.amount).toLocaleString('es-CL')}</span>
                                         </div>
                                     ))}
@@ -454,6 +484,34 @@ const Commitments = () => {
                                 <option value="one_time">Único</option>
                             </select>
                             <input type="date" value={editingItem.next_date} onChange={e => setEditingItem({ ...editingItem, next_date: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }} />
+                            <div style={{ display: 'flex', gap: '16px', marginBottom: '4px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                                    <input type="checkbox" checked={editingItem.is_variable} onChange={(e) => setEditingItem({ ...editingItem, is_variable: e.target.checked })} />
+                                    Monto variable
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                                    <input type="checkbox" checked={editingItem.has_installments} onChange={(e) => setEditingItem({ ...editingItem, has_installments: e.target.checked })} />
+                                    Cuotas
+                                </label>
+                            </div>
+                            {editingItem.has_installments && (
+                                <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+                                    <input
+                                        value={editingItem.installments_paid}
+                                        onChange={(e) => setEditingItem({ ...editingItem, installments_paid: e.target.value })}
+                                        placeholder="Cuota actual"
+                                        type="number"
+                                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                    />
+                                    <input
+                                        value={editingItem.installments_total}
+                                        onChange={(e) => setEditingItem({ ...editingItem, installments_total: e.target.value })}
+                                        placeholder="Total cuotas"
+                                        type="number"
+                                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                    />
+                                </div>
+                            )}
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button onClick={() => setEditModalOpen(false)} style={{ flex: 1, padding: '10px', background: '#eee', border: 'none', borderRadius: '6px' }}>Cerrar</button>
                                 <button onClick={handleEditSubmit} style={{ flex: 1, padding: '10px', background: 'var(--status-blue-main)', color: 'white', border: 'none', borderRadius: '6px' }}>Guardar</button>
