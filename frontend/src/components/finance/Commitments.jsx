@@ -367,8 +367,8 @@ const Commitments = () => {
                     const isFutureMonth = (c) => {
                         if (!c.next_date) return false;
                         const d = new Date(c.next_date);
-                        // If it's a future month AND not paid this month
-                        return (d.getFullYear() > currentYear || (d.getFullYear() === currentYear && d.getMonth() > currentMonth)) && !isPaidThisMonth(c);
+                        // If it's a future month
+                        return (d.getFullYear() > currentYear || (d.getFullYear() === currentYear && d.getMonth() > currentMonth));
                     };
 
                     const pending = commitments.filter(c => !isPaidThisMonth(c) && !isFutureMonth(c));
