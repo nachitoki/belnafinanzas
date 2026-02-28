@@ -54,13 +54,26 @@ def get_horizon(
         for doc in commitments_docs:
             data = doc.to_dict()
             next_date = _parse_date(data.get("next_date"))
-            if next_date and now <= next_date <= horizon:
+            
+            # Check if paid this month
+            last_paid = _parse_date(data.get("last_paid_at"))
+            is_paid_this_month = last_paid and last_paid.month == now.month and last_paid.year == now.year
+            
+            if is_paid_this_month:
+                continue
+                
+            # Include if next_date is in the past (overdue) OR within the 60-day horizon
+            if next_date and next_date <= horizon:
+                severity = "high"
+                if next_date < now:
+                    severity = "critical"
                 items.append({
                     "type": "commitment",
                     "label": data.get("name"),
                     "date": next_date.isoformat(),
                     "amount": data.get("amount", 0),
-                    "severity": "high",
+                    "severity": severity,
+                    "is_overdue": next_date < now,
                     "flow_category": data.get("flow_category"),
                     "impact_pct": round((float(data.get("amount", 0) or 0) / budget_ref) * 100, 1) if budget_ref else 0
                 })

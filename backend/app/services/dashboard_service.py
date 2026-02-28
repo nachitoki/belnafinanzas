@@ -166,13 +166,25 @@ class DashboardService:
         # Commitments Horizon
         for c in commitments:
             nd = _pdate(c.get("next_date"))
-            if nd and now.date() <= nd <= horizon_date:
+            
+            # Check if paid this month
+            last_paid = _pdate(c.get("last_paid_at"))
+            is_paid_this_month = last_paid and last_paid.month == now.month and last_paid.year == now.year
+            
+            if is_paid_this_month:
+                continue
+                
+            # Include if it's within horizon OR if it's overdue (nd < now)
+            if nd and nd <= horizon_date:
+                is_overdue = nd < now.date()
                 upcoming_items.append({
+                    "id": c.get("id"),
                     "type": "commitment",
                     "label": c.get("name"),
                     "date": nd.isoformat(),
                     "amount": c.get("amount", 0),
-                    "severity": "high",
+                    "severity": "critical" if is_overdue else "high",
+                    "is_overdue": is_overdue,
                     "flow_category": c.get("flow_category"),
                     "provisioned": c.get("flow_category") == "provision",
                     "impact_pct": round((float(c.get("amount", 0) or 0) / budget_ref) * 100, 1)
@@ -305,7 +317,10 @@ class DashboardService:
                 except: pass
             
             if not is_paid:
-                pending_commitments_amount += float(c.get("amount", 0) or 0)
+                # Count if it's due this month OR if it's overdue (next_date < start of month)
+                nd = _pdate(c.get("next_date"))
+                if nd and nd < (month_start + timedelta(days=31)).date():
+                    pending_commitments_amount += float(c.get("amount", 0) or 0)
 
         result = {
             "household_status": household_status.value,
@@ -383,9 +398,18 @@ class DashboardService:
             amt = float(d.get("amount") or 0)
             freq = d.get("frequency", "monthly")
             nd = parse_date(d.get("next_date"))
-            if freq == "monthly": incomes_total += amt
-            elif freq == "weekly": incomes_total += amt * 4
-            elif freq == "biweekly": incomes_total += amt * 2
+            doc_month = d.get("month") # e.g. "2026-02"
+            
+            target_month_str = month_key(month_start)
+            
+            if freq == "monthly":
+                # ONLY count if it belongs to this month or has no specific month (legacy)
+                if not doc_month or doc_month == target_month_str:
+                    incomes_total += amt
+            elif freq == "weekly": 
+                incomes_total += amt * 4
+            elif freq == "biweekly": 
+                incomes_total += amt * 2
             elif freq in ["one_time", "yearly"] and nd and month_start.date() <= nd < (month_start+timedelta(days=31)).date():
                 incomes_total += amt
         incomes_total += projected_variable_total(month_key(month_start))

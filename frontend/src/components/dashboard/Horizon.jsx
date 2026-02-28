@@ -53,6 +53,9 @@ const Horizon = ({ initialItems }) => {
 
     const chipStyle = (tone) => {
         // ... existing chipStyle
+        if (tone === 'critical') {
+            return { background: '#7F1D1D', color: '#fff', border: '1px solid #991B1B' };
+        }
         if (tone === 'danger') {
             return { background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5' };
         }
@@ -247,13 +250,13 @@ const Horizon = ({ initialItems }) => {
                                                 <div style={{ fontWeight: '700' }}>{item.label || item.name || 'Sin nombre'}</div>
                                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
                                                     <span style={{
-                                                        ...chipStyle(item.severity === 'high' ? 'danger' : 'warn'),
+                                                        ...chipStyle(item.severity === 'critical' ? 'critical' : (item.severity === 'high' ? 'danger' : 'warn')),
                                                         padding: '2px 8px',
                                                         borderRadius: '999px',
                                                         fontSize: '0.7rem',
-                                                        fontWeight: '600'
+                                                        fontWeight: '700'
                                                     }}>
-                                                        {item.type === 'commitment' ? 'Compromiso' : 'Evento'}
+                                                        {item.is_overdue ? '¡VENCIDO!' : (item.type === 'commitment' ? 'Compromiso' : 'Evento')}
                                                     </span>
                                                     {flowLabel(item.flow_category) && (
                                                         <span style={{

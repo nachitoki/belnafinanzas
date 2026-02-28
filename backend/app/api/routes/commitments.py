@@ -39,6 +39,7 @@ def list_commitments(
                 "next_date": data.get("next_date"),
                 "installments_total": data.get("installments_total", 0),
                 "installments_paid": data.get("installments_paid", 0),
+                "is_variable": data.get("is_variable", False),
                 "last_paid_at": data.get("last_paid_at"),
                 "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
             })
@@ -135,6 +136,7 @@ def create_commitment(
             "next_date": next_date,
             "installments_total": installments_total,
             "installments_paid": installments_paid,
+            "is_variable": bool(payload.get("is_variable", False)),
             "created_at": datetime.now()
         }
 
@@ -260,9 +262,12 @@ def update_commitment(
                     updates["next_date"] = (current_date + timedelta(days=days)).isoformat()
 
         # Direct field updates (optional)
-        for key in ["name", "amount", "frequency", "next_date", "flow_category", "installments_total", "installments_paid"]:
+        for key in ["name", "amount", "frequency", "next_date", "flow_category", "installments_total", "installments_paid", "is_variable"]:
             if key in payload and payload[key] is not None:
-                updates[key] = payload[key]
+                if key == "is_variable":
+                    updates[key] = bool(payload[key])
+                else:
+                    updates[key] = payload[key]
 
         if not updates:
             return {"success": True, "updated": False}

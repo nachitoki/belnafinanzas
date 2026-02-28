@@ -16,8 +16,8 @@ const Commitments = () => {
     const [nextDate, setNextDate] = useState('');
     const [flowCategory, setFlowCategory] = useState('structural');
     const [installmentsTotal, setInstallmentsTotal] = useState('');
-    const [installmentsPaid, setInstallmentsPaid] = useState('');
     const [hasInstallments, setHasInstallments] = useState(false);
+    const [isVariable, setIsVariable] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // Activity State
@@ -88,7 +88,8 @@ const Commitments = () => {
                 next_date: nextDate || null,
                 flow_category: flowCategory,
                 installments_total: hasInstallments ? parseNumber(installmentsTotal) : 0,
-                installments_paid: hasInstallments ? parseNumber(installmentsPaid) : 0
+                installments_paid: hasInstallments ? parseNumber(installmentsPaid) : 0,
+                is_variable: isVariable
             });
             setName('');
             setAmount('');
@@ -130,9 +131,8 @@ const Commitments = () => {
     };
 
     const handlePay = (item) => {
-        // Deprecated in favor of inline flow, keeping if needed for direct calls
         setActionPayingId(item.id);
-        setPayAmount(item.amount);
+        setPayAmount(item.is_variable ? '' : item.amount);
     };
 
     const handlePostpone = (item, value = null) => {
@@ -167,7 +167,8 @@ const Commitments = () => {
             ...item,
             has_installments: (item.installments_total > 0),
             installments_paid: item.installments_paid || 0,
-            installments_total: item.installments_total || 0
+            installments_total: item.installments_total || 0,
+            is_variable: item.is_variable || false
         });
         setEditModalOpen(true);
     };
@@ -183,7 +184,8 @@ const Commitments = () => {
                 next_date: editingItem.next_date || null,
                 flow_category: editingItem.flow_category,
                 installments_total: editingItem.has_installments ? parseNumber(editingItem.installments_total) : 0,
-                installments_paid: editingItem.has_installments ? parseNumber(editingItem.installments_paid) : 0
+                installments_paid: editingItem.has_installments ? parseNumber(editingItem.installments_paid) : 0,
+                is_variable: editingItem.is_variable
             });
             setEditModalOpen(false);
             setEditingItem(null);
@@ -274,14 +276,25 @@ const Commitments = () => {
                     </select>
                 </div>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontSize: '0.9rem', cursor: 'pointer' }}>
-                    <input
-                        type="checkbox"
-                        checked={hasInstallments}
-                        onChange={(e) => setHasInstallments(e.target.checked)}
-                    />
-                    <span>¿Es una compra en cuotas?</span>
-                </label>
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={isVariable}
+                            onChange={(e) => setIsVariable(e.target.checked)}
+                        />
+                        <span>¿Monto variable?</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={hasInstallments}
+                            onChange={(e) => setHasInstallments(e.target.checked)}
+                        />
+                        <span>¿Compra en cuotas?</span>
+                    </label>
+                </div>
 
                 {hasInstallments && (
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
@@ -341,7 +354,27 @@ const Commitments = () => {
                 <div className="loading-text">Sin compromisos aun.</div>
             ) : (
                 (() => {
-                    // Grouping Logic
+                    const now = new Date();
+                    const currentMonth = now.getMonth();
+                    const currentYear = now.getFullYear();
+
+                    const isPaidThisMonth = (c) => {
+                        if (!c.last_paid_at) return false;
+                        const p = new Date(c.last_paid_at);
+                        return p.getMonth() === currentMonth && p.getFullYear() === currentYear;
+                    };
+
+                    const isFutureMonth = (c) => {
+                        if (!c.next_date) return false;
+                        const d = new Date(c.next_date);
+                        // If it's a future month AND not paid this month
+                        return (d.getFullYear() > currentYear || (d.getFullYear() === currentYear && d.getMonth() > currentMonth)) && !isPaidThisMonth(c);
+                    };
+
+                    const pending = commitments.filter(c => !isPaidThisMonth(c) && !isFutureMonth(c));
+                    const paid = commitments.filter(c => isPaidThisMonth(c));
+                    const future = commitments.filter(c => isFutureMonth(c));
+
                     const getGroup = (c) => {
                         const name = (c.name || '').toLowerCase();
                         if (name.includes('arriendo') || name.includes('dividendo') || name.includes('luz') || name.includes('agua') || name.includes('gas') || name.includes('internet') || name.includes('casa') || name.includes('nana')) return 'Hogar';
@@ -353,174 +386,124 @@ const Commitments = () => {
                         return 'Otros';
                     };
 
-                    const groups = commitments.reduce((acc, c) => {
-                        const g = getGroup(c);
-                        acc[g] = acc[g] || [];
-                        acc[g].push(c);
-                        return acc;
-                    }, {});
+                    const renderItems = (itemsList, title, color = 'var(--color-text-main)') => {
+                        if (itemsList.length === 0) return null;
 
-                    // Filter Logic: If selectedCategory is set, only show that group.
-                    // If not, use defined order.
-                    const groupOrder = selectedCategory
-                        ? [selectedCategory]
-                        : ['Hogar', 'Alimentación', 'Educación', 'Salud', 'Transporte', 'Deudas', 'Otros'];
+                        const grouped = itemsList.reduce((acc, c) => {
+                            const g = getGroup(c);
+                            acc[g] = acc[g] || [];
+                            acc[g].push(c);
+                            return acc;
+                        }, {});
 
-                    return groupOrder.map(groupName => {
-                        const items = groups[groupName] || [];
-                        if (items.length === 0) return null;
-
-                        const totalGroup = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+                        const groupOrder = ['Hogar', 'Alimentación', 'Educación', 'Salud', 'Transporte', 'Deudas', 'Otros'];
 
                         return (
-                            <div key={groupName} style={{ marginBottom: '20px' }}>
-                                {/* Hide header if single category selected (title already says it) */}
-                                {!selectedCategory && (
-                                    <div style={{
-                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                        background: 'var(--bg-card)', padding: '10px 14px', borderRadius: '12px',
-                                        border: '1px solid var(--border-light)', marginBottom: '8px'
-                                    }}>
-                                        <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--color-text-main)' }}>{groupName}</h3>
-                                        <span style={{ fontWeight: '700', color: 'var(--color-text-dim)' }}>${totalGroup.toLocaleString('es-CL')}</span>
-                                    </div>
-                                )}
-
-                                {items.map(c => (
-                                    <div key={c.id} className="spending-card" style={{ marginBottom: '8px', borderLeft: '4px solid #E2E8F0' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                            <div>
-                                                <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>{c.name}</div>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    {c.frequency || 'mensual'} {c.next_date ? `· ${c.next_date}` : ''}
-                                                    {c.flow_category === 'provision' && (
-                                                        <span style={{
-                                                            fontSize: '0.65rem', background: '#FEF3C7', color: '#B45309',
-                                                            padding: '2px 6px', borderRadius: '4px', border: '1px solid #FCD34D',
-                                                            fontWeight: '600'
-                                                        }}>
-                                                            PROVISIÓN
-                                                        </span>
-                                                    )}
+                            <div style={{ marginBottom: '30px' }}>
+                                <div style={{
+                                    fontSize: '0.75rem', fontWeight: '800', color: 'var(--color-text-dim)',
+                                    paddingLeft: '10px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em'
+                                }}>
+                                    {title} ({itemsList.length})
+                                </div>
+                                {groupOrder.map(g => {
+                                    const gItems = grouped[g] || [];
+                                    if (gItems.length === 0) return null;
+                                    return (
+                                        <div key={g} style={{ marginBottom: '16px' }}>
+                                            {title === 'Pendientes' && (
+                                                <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text-dim)', marginBottom: '6px', paddingLeft: '4px' }}>
+                                                    {g}
                                                 </div>
-                                                {(c.installments_total > 0) && (
-                                                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--status-blue-main)' }}>
-                                                        Cuota {c.installments_paid + 1}/{c.installments_total}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                                                    {(() => {
-                                                        if (!c.last_paid_at) return null;
-                                                        const p = new Date(c.last_paid_at);
-                                                        const n = new Date();
-                                                        const isPaid = p.getMonth() === n.getMonth() && p.getFullYear() === n.getFullYear();
-                                                        if (!isPaid) return null;
-                                                        return (
-                                                            <span style={{
-                                                                background: '#DCFCE7', color: '#166534',
-                                                                fontSize: '0.7rem', fontWeight: '800',
-                                                                padding: '2px 6px', borderRadius: '4px', border: '1px solid #86EFAC'
-                                                            }}>
-                                                                PAGADO
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                    <div style={{ fontWeight: '700', color: 'var(--status-green-main)' }}>
-                                                        ${Math.round(Number(c.amount)).toLocaleString('es-CL')}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Actions Bar */}
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
-                                            {(() => {
-                                                const isPaidThisMonth = (() => {
-                                                    if (!c.last_paid_at) return false;
-                                                    const p = new Date(c.last_paid_at);
-                                                    const n = new Date();
-                                                    return p.getMonth() === n.getMonth() && p.getFullYear() === n.getFullYear();
-                                                })();
+                                            )}
+                                            {gItems.map(c => {
+                                                const overdue = c.next_date && new Date(c.next_date) < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                                const isPaid = isPaidThisMonth(c);
 
                                                 return (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleEditOpen(c)}
-                                                            style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
-                                                        >
-                                                            ✏️
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(c.id)}
-                                                            style={{ border: 'none', background: 'transparent', fontSize: '1rem', cursor: 'pointer', opacity: 0.6 }}
-                                                        >
-                                                            🗑️
-                                                        </button>
-
-                                                        <div style={{ width: '1px', background: '#ddd', margin: '0 4px' }}></div>
-
-                                                        <button
-                                                            onClick={() => handlePostpone(c)}
-                                                            disabled={isPaidThisMonth}
-                                                            style={{ fontSize: '0.7rem', border: '1px solid #ddd', background: 'white', borderRadius: '4px', padding: '2px 6px', opacity: isPaidThisMonth ? 0.5 : 1 }}
-                                                        >
-                                                            Postergar
-                                                        </button>
-
-                                                        {actionPayingId === c.id ? (
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                <input
-                                                                    type="number"
-                                                                    value={payAmount}
-                                                                    onChange={(e) => setPayAmount(e.target.value)}
-                                                                    style={{ width: '80px', padding: '2px 4px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid #2E7D32' }}
-                                                                    autoFocus
-                                                                />
-                                                                <button
-                                                                    onClick={() => confirmPay(c)}
-                                                                    disabled={actionSavingId === c.id}
-                                                                    style={{
-                                                                        fontSize: '0.7rem', background: '#2E7D32', color: 'white',
-                                                                        border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer'
-                                                                    }}
-                                                                >
-                                                                    {actionSavingId === c.id ? '...' : 'OK'}
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setActionPayingId(null); setPayAmount(''); }}
-                                                                    style={{
-                                                                        fontSize: '0.7rem', background: '#ddd', color: '#666',
-                                                                        border: 'none', borderRadius: '4px', padding: '4px 6px', cursor: 'pointer'
-                                                                    }}
-                                                                >
-                                                                    X
-                                                                </button>
+                                                    <div key={c.id} className="spending-card" style={{
+                                                        marginBottom: '8px',
+                                                        borderLeft: `4px solid ${isPaid ? '#22C55E' : (overdue ? '#EF4444' : '#E2E8F0')}`,
+                                                        opacity: isPaid ? 0.8 : 1
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    <div style={{ fontWeight: '700', fontSize: '0.95rem' }}>{c.name}</div>
+                                                                    {c.is_variable && (
+                                                                        <span style={{ fontSize: '0.65rem', background: '#F1F5F9', color: '#64748B', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>VARIABLE</span>
+                                                                    )}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginTop: '2px' }}>
+                                                                    {c.next_date || 'Sin fecha'} · {c.frequency}
+                                                                </div>
                                                             </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => { setActionPayingId(c.id); setPayAmount(c.amount); }}
-                                                                disabled={actionSavingId === c.id || isPaidThisMonth}
-                                                                style={{
-                                                                    fontSize: '0.75rem', border: 'none',
-                                                                    background: (actionSavingId === c.id || isPaidThisMonth) ? '#ddd' : 'var(--status-green-main)',
-                                                                    color: (isPaidThisMonth) ? '#666' : 'white',
-                                                                    borderRadius: '4px', padding: '4px 10px', fontWeight: '600'
-                                                                }}
-                                                            >
-                                                                {actionSavingId === c.id ? '...' : isPaidThisMonth ? 'Listo' : 'Pagar'}
-                                                            </button>
-                                                        )}
-                                                    </>
+                                                            <div style={{ textAlign: 'right' }}>
+                                                                <div style={{ fontWeight: '800', color: isPaid ? '#16A34A' : 'var(--color-text-main)' }}>
+                                                                    ${Math.round(Number(c.amount)).toLocaleString('es-CL')}
+                                                                </div>
+                                                                {c.is_variable && !isPaid && (
+                                                                    <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>Est. aproximado</div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Actions */}
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f8f8f8' }}>
+                                                            <button onClick={() => handleEditOpen(c)} style={{ border: 'none', background: 'transparent', fontSize: '0.9rem', cursor: 'pointer', opacity: 0.5 }}>✏️</button>
+                                                            <button onClick={() => handleDelete(c.id)} style={{ border: 'none', background: 'transparent', fontSize: '0.9rem', cursor: 'pointer', opacity: 0.5 }}>🗑️</button>
+
+                                                            <div style={{ flex: 1 }} />
+
+                                                            {actionPayingId === c.id ? (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={payAmount}
+                                                                        onChange={(e) => setPayAmount(e.target.value)}
+                                                                        placeholder={c.is_variable ? 'Monto real' : ''}
+                                                                        style={{ width: '90px', padding: '4px 8px', fontSize: '0.8rem', borderRadius: '6px', border: '2px solid #22C55E', textAlign: 'right' }}
+                                                                        autoFocus
+                                                                    />
+                                                                    <button onClick={() => confirmPay(c)} className="btn-save" style={{ padding: '4px 12px', fontSize: '0.75rem' }}>OK</button>
+                                                                    <button onClick={() => { setActionPayingId(null); setPayAmount(''); }} style={{ background: '#f1f1f1', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>X</button>
+                                                                </div>
+                                                            ) : (
+                                                                !isPaid && (
+                                                                    <button
+                                                                        onClick={() => { setActionPayingId(c.id); setPayAmount(c.is_variable ? '' : c.amount); }}
+                                                                        style={{
+                                                                            background: overdue ? '#EF4444' : '#22C55E',
+                                                                            color: 'white', border: 'none', padding: '4px 16px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700'
+                                                                        }}
+                                                                    >
+                                                                        {overdue ? 'Pagar Vencido' : 'Pagar'}
+                                                                    </button>
+                                                                )
+                                                            )}
+                                                            {isPaid && (
+                                                                <div style={{ color: '#16A34A', fontSize: '0.8rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                    <span>✓ Pagado</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 );
-                                            })()}
+                                            })}
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         );
-                    });
+                    };
+
+                    return (
+                        <div style={{ marginTop: '20px' }}>
+                            {renderItems(pending, 'Pendientes')}
+                            {renderItems(paid, 'Ya Pagados')}
+                            {renderItems(future, 'Próximos Meses')}
+                        </div>
+                    );
                 })()
             )}
 
@@ -574,7 +557,6 @@ const Commitments = () => {
                                     />
                                 </div>
                             </div>
-
                             <label style={{ fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>Categoría Flujo</label>
                             <select
                                 value={editingItem.flow_category || 'structural'}
@@ -585,6 +567,15 @@ const Commitments = () => {
                                 <option value="provision">Provisión</option>
                                 <option value="discretionary">Discrecional/Deuda</option>
                             </select>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer', marginTop: '10px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={editingItem.is_variable || false}
+                                    onChange={e => setEditingItem({ ...editingItem, is_variable: e.target.checked })}
+                                />
+                                <span>¿Es monto variable?</span>
+                            </label>
 
                             {/* Edit Installments Logic */}
                             <div style={{ borderTop: '1px dashed #eee', paddingTop: '10px', marginTop: '4px' }}>
@@ -640,8 +631,9 @@ const Commitments = () => {
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };
 
