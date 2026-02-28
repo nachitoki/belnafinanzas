@@ -44,11 +44,15 @@ def list_commitments(
                 "created_at": data.get("created_at").isoformat() if data.get("created_at") else ""
             })
         
-        # Synthetic Commitment: Almuerzos Planificados
+        # Synthetic Commitments Logic
         try:
             start_of_month = datetime(now.year, now.month, 1).strftime("%Y-%m-%d")
             current_month_str = now.strftime("%Y-%m")
             
+            # Check for REAL shopping commitments in database
+            shopping_keywords = ["compra grande", "jumbo", "lider", "unimarc", "supermercado", "tottus", "santa isabel"]
+            has_real_shopping = any(any(k in (c.get("name") or "").lower() for k in shopping_keywords) for c in results)
+
             meal_docs = db.collection("households").document(household_id)\
                 .collection("meal_plans")\
                 .where("date", ">=", start_of_month)\
@@ -69,36 +73,61 @@ def list_commitments(
             for s in shopping_docs:
                 extras_total += int(s.to_dict().get("estimated_cost") or 0)
             
+            # TOTAL = Meals + Extras
             compra_grande_total = meals_total + extras_total
 
-            # 1. Almuerzos Planificados
-            results.append({
-                "id": "synthetic_meals",
-                "name": "Almuerzos Planificados",
-                "amount": meals_total,
-                "frequency": "monthly",
-                "flow_category": "structural",
-                "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
-                "installments_total": 0,
-                "installments_paid": 0,
-                "last_paid_at": None,
-                "created_at": now.isoformat()
-            })
-            
-            # 2. Compra Grande (Sum of All)
-            results.append({
-                "id": "synthetic_shopping",
-                "name": "Total Compra Grande",
-                "amount": compra_grande_total,
-                "frequency": "monthly",
-                "flow_category": "structural",
-                "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
-                "installments_total": 0,
-                "installments_paid": 0,
-                "last_paid_at": None,
-                "created_at": now.isoformat(),
-                "description": f"Almuerzos: ${meals_total:,} + Extras: ${extras_total:,}"
-            })
+            if not has_real_shopping:
+                # If no real commitment exists, we show the "Total Compra Grande" as the main one
+                # and "Almuerzos Planificados" with amount 0 or just as a label to avoid double summing
+                # BUT the user said "se suma", so let's only provide the breakdown if it makes sense.
+                
+                # To avoid double summing in "Alimentación" group:
+                # We'll show "Almuerzos Planificados" but with 0 amount for calculation purposes,
+                # putting the full weight on "Total Compra Grande".
+                
+                results.append({
+                    "id": "synthetic_meals",
+                    "name": "Almuerzos Planificados",
+                    "amount": 0, # Set to 0 to avoid double counting in totals
+                    "frequency": "monthly",
+                    "flow_category": "structural",
+                    "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
+                    "installments_total": 0,
+                    "installments_paid": 0,
+                    "last_paid_at": None,
+                    "created_at": now.isoformat(),
+                    "description": f"Costo estimado de recetas: ${meals_total:,}"
+                })
+                
+                results.append({
+                    "id": "synthetic_shopping",
+                    "name": "Total Compra Grande",
+                    "amount": compra_grande_total,
+                    "frequency": "monthly",
+                    "flow_category": "structural",
+                    "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
+                    "installments_total": 0,
+                    "installments_paid": 0,
+                    "last_paid_at": None,
+                    "created_at": now.isoformat(),
+                    "description": f"Almuerzos: ${meals_total:,} + Despensa: ${extras_total:,}"
+                })
+            else:
+                # If a real shopping commitment exists (e.g. user added "Jumbo $500k"),
+                # we only add "Almuerzos Planificados" as an info card with $0 to avoid double counting.
+                results.append({
+                    "id": "synthetic_meals_info",
+                    "name": "Almuerzos Planificados (Info)",
+                    "amount": 0,
+                    "frequency": "monthly",
+                    "flow_category": "structural",
+                    "next_date": datetime(now.year, now.month, 1).strftime("%Y-%m-%d"),
+                    "installments_total": 0,
+                    "installments_paid": 0,
+                    "last_paid_at": None,
+                    "created_at": now.isoformat(),
+                    "description": f"Costo estimado de recetas: ${meals_total:,}. Ya incluido en tu presupuesto de compra."
+                })
 
         except Exception as e:
             print(f"Error calculating synthetic meals: {e}")
