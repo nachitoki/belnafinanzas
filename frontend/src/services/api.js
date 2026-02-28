@@ -320,6 +320,13 @@ export const askBitacora = async (payload) => {
     return response.data;
 };
 
+export const saveSalaryPlan = async (payload) => {
+    const response = await postWithFallback('/bitacora/salary-plan', payload || {}, {
+        timeout: REQUEST_TIMEOUT_MS,
+    });
+    return response.data;
+};
+
 export const generateBitacoraObservations = async () => {
     const response = await postWithFallback('/bitacora/auto-observations', {}, {
         timeout: REQUEST_TIMEOUT_MS,

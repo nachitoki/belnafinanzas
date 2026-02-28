@@ -40,3 +40,12 @@ Thumbs.db
 *.mov
 *.mp4
 
+# Secrets
+prod-credentials.json
+service-account-key.json
+backend/prod-credentials.json
+backend/service-account-key.json
+backend/venv/
+all_households_data.json
+data_dump.json
+

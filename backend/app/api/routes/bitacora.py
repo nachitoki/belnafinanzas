@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from google.cloud.firestore import Client
 from app.core.firebase import get_firestore
 from app.core.auth import get_current_user
+from app.core.supabase import get_supabase
+from supabase import Client as SupabaseClient
 from app.services.dashboard_service import DashboardService
-from datetime import datetime
+from datetime import datetime, date
 
 router = APIRouter()
 
@@ -167,10 +169,18 @@ def _build_pattern_candidates(summary: dict) -> list[dict]:
 def list_bitacora(
     user: dict = Depends(get_current_user),
     db: Client = Depends(get_firestore),
+    supabase: SupabaseClient = Depends(get_supabase),
     limit: int = Query(100, ge=1, le=200)
 ):
     try:
         household_id = user["household_id"]
+        
+        # Primero intentamos con Supabase (SQL)
+        if supabase:
+            res = supabase.table("bitacora").select("*").eq("household_id", household_id).order("created_at", desc=True).limit(limit).execute()
+            return res.data
+
+        # Fallback a Firestore (Legacy)
         entries_ref = db.collection("households").document(household_id).collection("bitacora")
         docs = entries_ref.order_by("created_at", direction="DESCENDING").limit(limit).stream()
 
@@ -202,7 +212,8 @@ def list_bitacora(
 def create_bitacora(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    db: Client = Depends(get_firestore),
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -212,6 +223,18 @@ def create_bitacora(
 
         kind = (payload.get("kind") or "nota").strip()
         now = datetime.now()
+        
+        if supabase:
+            data_sq = {
+                "household_id": household_id,
+                "text": text,
+                "kind": kind,
+                "meta": payload.get("meta") or {}
+            }
+            res = supabase.table("bitacora").insert(data_sq).execute()
+            return {"id": res.data[0]["id"] if res.data else None, "success": True}
+
+        # Fallback Firestore
         data = {
             "text": text,
             "kind": kind,
@@ -240,6 +263,82 @@ def create_bitacora(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bitacora/salary-plan")
+def save_salary_plan(
+    payload: dict,
+    user: dict = Depends(get_current_user),
+    supabase: SupabaseClient = Depends(get_supabase)
+):
+    """
+    Guarda las decisiones tomadas en el SalaryPlanner. 
+    Inserta gastos en transactions si no existen duplicados.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+        
+    household_id = user["household_id"]
+    decisions = payload.get("decisions", {})
+    summary = payload.get("summary", {})
+    now = datetime.now()
+    month_str = now.strftime("%Y-%m")
+    
+    # 1. Registrar entrada en Bitácora
+    plan_entry = {
+        "household_id": household_id,
+        "text": f"Plan Salarial Marzo: Saldo final ${summary.get('balance', 0):,}",
+        "kind": "salary_plan",
+        "meta": {
+            "decisions": decisions,
+            "summary": summary,
+            "salary_real": 1732286
+        }
+    }
+    supabase.table("bitacora").insert(plan_entry).execute()
+
+    # 2. Lógica de Sincronización de Gastos (No-Duplicidad)
+    # Buscamos transacciones del mes actual para comparar
+    month_start = date(now.year, now.month, 1).isoformat()
+    existing_trans = supabase.table("transactions")\
+        .select("description, amount")\
+        .eq("household_id", household_id)\
+        .gte("occurred_on", month_start)\
+        .execute().data
+    
+    def exists(name, amt):
+        name_l = name.lower()
+        for t in existing_trans:
+            if name_l in (t.get("description") or "").lower() and abs(float(t.get("amount") or 0)) == abs(amt):
+                return True
+        return False
+
+    new_txs = []
+    
+    # Matrícula
+    if decisions.get("payMatricula") and not exists("Matrícula", 100000):
+        new_txs.append({
+            "household_id": household_id,
+            "amount": 100000,
+            "description": "Matrícula Academia (Bautismo de Presupuesto)",
+            "occurred_on": now.isoformat(),
+            "status": "posted"
+        })
+
+    # Viaje Coyhaique
+    if decisions.get("goCoyhaique") and not exists("Coyhaique", 65000):
+        new_txs.append({
+            "household_id": household_id,
+            "amount": 65000,
+            "description": "Viaje Familiar Coyhaique (Bautismo de Presupuesto)",
+            "occurred_on": now.isoformat(),
+            "status": "posted"
+        })
+
+    if new_txs:
+        supabase.table("transactions").insert(new_txs).execute()
+
+    return {"success": True, "inserted_transactions": len(new_txs)}
 
 
 @router.post("/bitacora/auto-observations")

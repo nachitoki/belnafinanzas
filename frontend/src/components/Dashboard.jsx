@@ -8,6 +8,7 @@ import SpendingZone from './dashboard/SpendingZone';
 import PillTabs from './layout/PillTabs';
 import Alerts from './dashboard/Alerts';
 import QuickAddExpense from './dashboard/QuickAddExpense';
+import SalaryPlanner from './dashboard/SalaryPlanner';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -151,6 +152,11 @@ const Dashboard = () => {
             <div style={{ marginBottom: '24px', marginTop: '10px' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-text-main)' }}>Estado del Hogar</h2>
                 <small style={{ color: 'var(--color-text-dim)', fontSize: '0.9rem' }}>Semana actual</small>
+            </div>
+
+            {/* Salary Day Special Assistant */}
+            <div style={{ marginBottom: '24px' }}>
+                <SalaryPlanner />
             </div>
 
             {/* Components in order */}
