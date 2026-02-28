@@ -63,21 +63,31 @@ const Incomes = () => {
         if (inc.is_variable) return acc;
         const key = inc.name || 'Sin nombre';
         const amt = Number(inc.amount || 0);
+
         if (inc.frequency === 'weekly') acc[key] = (acc[key] || 0) + amt * 4;
         else if (inc.frequency === 'biweekly') acc[key] = (acc[key] || 0) + amt * 2;
         else if (inc.frequency === 'monthly') acc[key] = (acc[key] || 0) + amt;
-        else if (inc.frequency === 'one_time') acc[key] = (acc[key] || 0) + amt;
-        else acc[key] = (acc[key] || 0);
+        else if (inc.frequency === 'one_time') {
+            // Only if created this month
+            const created = inc.created_at ? inc.created_at.slice(0, 7) : '';
+            if (created === currentMonth) {
+                acc[key] = (acc[key] || 0) + amt;
+            }
+        }
         return acc;
     }, {});
 
     const variableBySource = incomes.reduce((acc, inc) => {
         if (!inc.is_variable) return acc;
+        // Only current month for variable
+        const m = inc.month || '';
+        if (m !== currentMonth) return acc;
         const key = inc.name || 'Sin nombre';
         acc[key] = (acc[key] || 0) + Number(inc.amount || 0);
         return acc;
     }, {});
-    const totalIncomes = incomes.reduce((acc, inc) => acc + Number(inc.amount || 0), 0);
+
+    const totalIncomes = totalFixedMonthly + totalVariableThisMonth + oneTimeThisMonth;
 
     const distributionMeta = loadDistributionMeta();
 
