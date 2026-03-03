@@ -1,6 +1,4 @@
 ﻿from abc import ABC, abstractmethod
-from google import genai
-from google.genai import types
 import json
 import logging
 from typing import Optional
