@@ -113,8 +113,48 @@ async def debug_db():
 
 
 
-# Include routers
-app.include_router(receipts.router, prefix="/api", tags=["receipts"])
+@app.get("/debug/inject")
+async def debug_inject():
+    """Emergency injection using backend's own env vars"""
+    try:
+        from app.core.supabase import get_supabase
+        supabase = get_supabase()
+        hh_id = "51e7a0a0-6de5-52a5-be37-b9cad7e49257" # Familia Demo
+        
+        # Incomes
+        incomes = [
+            {"household_id": hh_id, "name": "Sueldo 1", "amount": 1800000, "frequency": "monthly", "next_date": "2026-03-01"},
+            {"household_id": hh_id, "name": "Sueldo 2", "amount": 350000, "frequency": "monthly", "next_date": "2026-03-01"}
+        ]
+        supabase.table("incomes").insert(incomes).execute()
+        
+        # Commitments
+        commitments = [
+            {"household_id": hh_id, "name": "Arriendo", "amount": 600000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Luz", "amount": 259300, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Agua", "amount": 79850, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Internet", "amount": 47000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Unipay", "amount": 317817, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Cencosud 1", "amount": 120000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Cencosud 2", "amount": 70000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Youtube", "amount": 11000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Ale", "amount": 26690, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Entel", "amount": 42330, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Wom", "amount": 36449, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Agustín", "amount": 300000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Google", "amount": 21700, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Joaquín", "amount": 109923, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Bencina", "amount": 100000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Veritas", "amount": 29289, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Mercadolibre Carlos", "amount": 26411, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+            {"household_id": hh_id, "name": "Mercadolibre Ana", "amount": 13330, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
+        ]
+        supabase.table("commitments").insert(commitments).execute()
+        
+        return {"success": True, "message": "Real data injected into Demo Household"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(telegram.router, prefix="/api/telegram", tags=["telegram"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
