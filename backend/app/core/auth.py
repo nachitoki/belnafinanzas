@@ -27,20 +27,18 @@ async def get_current_user(
     """
     Verify Firebase ID token and return user data from Supabase
     """
-    # DEV BYPASS: Allow mock user only in development
-    if not authorization:
-        if settings.is_development:
-            logger.warning("No auth header - using MOCK USER for development")
-            # Look up the first household in Supabase for dev
-            resp = supabase.table("households").select("id").limit(1).execute()
-            hh_id = resp.data[0]["id"] if resp.data else "household_1"
-            return {
-                'id': 'user_dev',
-                'email': 'dev@example.com',
-                'household_id': hh_id,
-                'name': 'Developer'
-            }
-        raise HTTPException(status_code=401, detail="Missing authorization header")
+    # DEV BYPASS: Always use mock user in development
+    if settings.is_development:
+        logger.info("Development mode - using mock user")
+        resp = supabase.table("households").select("id").limit(1).execute()
+        hh_id = resp.data[0]["id"] if resp.data else "household_1"
+        return {
+            'id': 'user_dev',
+            'user_id': 'user_dev',
+            'email': 'dev@example.com',
+            'household_id': hh_id,
+            'name': 'Developer'
+        }
 
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization format")
