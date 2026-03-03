@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from google.cloud.firestore import Client
 from app.core.firebase import get_firestore
-from app.core.supabase import get_supabase
-from supabase import Client as SupabaseClient
 from app.core.auth import get_current_user
 from datetime import datetime, timedelta, date
 from typing import Optional
@@ -16,8 +14,7 @@ _CACHE_TTL_SECONDS = 60
 @router.get("/commitments")
 def list_commitments(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore),
-    supabase: SupabaseClient = Depends(get_supabase)
+    db: Client = Depends(get_firestore)
 ):
     try:
         household_id = user["household_id"]
@@ -70,25 +67,25 @@ def list_commitments(
             shopping_keywords = ["compra grande", "jumbo", "lider", "unimarc", "supermercado", "tottus", "santa isabel"]
             has_real_shopping = any(any(k in (c.get("name") or "").lower() for k in shopping_keywords) for c in results)
 
+            meal_docs = db.collection("households").document(household_id)\
+                .collection("meal_plans")\
+                .where("date", ">=", start_of_month)\
+                .stream()
+                
             meals_total = 0
-            try:
-                meals_resp = supabase.table('meal_plans').select('recipe_cost').eq('household_id', household_id).gte('date', start_of_month).execute()
-                if meals_resp.data:
-                    for m in meals_resp.data:
-                        meals_total += int(m.get("recipe_cost") or 0)
-            except Exception as e:
-                print(f"DEBUG: Error fetching synthetic meals from Supabase: {e}")
-
+            for m in meal_docs:
+                m_data = m.to_dict()
+                meals_total += int(m_data.get("recipe_cost") or 0)
+                
+            # Fetch Extra Shopping Items for the month
+            shopping_docs = db.collection("households").document(household_id)\
+                .collection("shopping_list")\
+                .where("month", "==", current_month_str)\
+                .stream()
+            
             extras_total = 0
-            try:
-                shopping_resp = supabase.table('shopping_list').select('estimated_cost, quantity').eq('household_id', household_id).eq('month', current_month_str).execute()
-                if shopping_resp.data:
-                    for s in shopping_resp.data:
-                        cost = int(s.get("estimated_cost") or 0)
-                        qty = int(s.get("quantity") or 1)
-                        extras_total += cost * qty
-            except Exception as e:
-                print(f"DEBUG: Error fetching synthetic shopping from Supabase: {e}")
+            for s in shopping_docs:
+                extras_total += int(s.to_dict().get("estimated_cost") or 0)
             
             # TOTAL = Meals + Extras
             compra_grande_total = meals_total + extras_total

@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getRecipes, getShoppingList, getMeals } from '../../services/api';
+import { getRecipes, getShoppingList } from '../../services/api';
 import PillTabs from '../layout/PillTabs';
 
 const STORAGE_KEY = 'inventory_selected_recipes';
@@ -74,28 +74,18 @@ const Inventory = () => {
         }
     }, [selected]);
 
-    const loadFromCalendar = async () => {
+    const loadFromCalendar = () => {
         try {
-            const d = new Date();
-            const year = d.getFullYear();
-            const month = d.getMonth();
-            const start = new Date(year, month, 1).toISOString().split('T')[0];
-            const end = new Date(year, month + 1, 0).toISOString().split('T')[0];
-
-            const meals = await getMeals(start, end);
-            if (meals && Array.isArray(meals)) {
-                const values = meals.map(m => m.recipe_name).filter(Boolean);
-                const unique = Array.from(new Set(values));
-                if (unique.length > 0) {
-                    setSelected(unique);
-                    alert(`¡Cargados ${unique.length} platos del mes actual!`);
-                } else {
-                    alert('No hay platos asignados en este mes.');
-                }
-            }
+            const keys = Object.keys(localStorage).filter((k) => k.startsWith('meal_calendar_'));
+            if (keys.length === 0) return;
+            const latest = keys.sort().reverse()[0];
+            const raw = localStorage.getItem(latest);
+            const data = raw ? JSON.parse(raw) : {};
+            const values = Object.values(data || {}).filter(Boolean);
+            const unique = Array.from(new Set(values));
+            setSelected(unique);
         } catch (e) {
-            console.error(e);
-            alert('Error al cargar el calendario');
+            // ignore
         }
     };
 
@@ -322,48 +312,6 @@ const Inventory = () => {
                                                 color: item.inList ? 'var(--status-green-main)' : 'var(--status-red-main)'
                                             }}>
                                                 {item.inList ? 'En lista' : 'Falta'}
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-
-                            {/* EXTRAS CARD */}
-                            <div className="spending-card" style={{ marginBottom: '14px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                    <div style={{ fontWeight: '700', color: '#0f172a' }}>🛍️ Compra Grande (Extras)</div>
-                                </div>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '10px' }}>
-                                    Insumos que agregaste y no son parte de los platos seleccionados.
-                                </div>
-
-                                {shoppingList.filter(item => {
-                                    const norm = normalizeText(item.name);
-                                    return !ingredientSummary.some(ing => ing.key === norm);
-                                }).length === 0 ? (
-                                    <div style={{ color: 'var(--color-text-dim)', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                                        No hay insumos extra por el momento.
-                                    </div>
-                                ) : (
-                                    shoppingList.filter(item => {
-                                        const norm = normalizeText(item.name);
-                                        return !ingredientSummary.some(ing => ing.key === norm);
-                                    }).map(item => (
-                                        <div
-                                            key={item.id}
-                                            style={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                padding: '6px 0',
-                                                borderBottom: '1px solid #e2e8f0',
-                                                fontSize: '0.9rem'
-                                            }}
-                                        >
-                                            <div>
-                                                <div style={{ fontWeight: '600', color: '#1e293b' }}>{item.name} <span style={{ color: '#64748b', fontSize: '0.8rem' }}>x{item.quantity || 1}</span></div>
-                                            </div>
-                                            <div style={{ fontWeight: '700', color: '#0f172a' }}>
-                                                ${((item.estimated_cost || 0) * (item.quantity || 1)).toLocaleString('es-CL')}
                                             </div>
                                         </div>
                                     ))
