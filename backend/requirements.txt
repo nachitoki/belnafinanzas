@@ -23,7 +23,7 @@ python-telegram-bot==20.7
 
 # Development
 pytest==7.4.4
-httpx
+httpx==0.27.2
 pandas
-supabase>=2.3.0
+supabase==2.11.0
 loguru
