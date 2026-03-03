@@ -18,8 +18,8 @@ Pillow>=10.2.0
 python-dotenv==1.0.0
 python-jose[cryptography]==3.3.0
 
-# Telegram Bot (for Sprint 2+)
-python-telegram-bot==20.7
+# Telegram Bot
+python-telegram-bot>=21.0
 
 # Development
 pytest==7.4.4
