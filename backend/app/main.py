@@ -32,14 +32,13 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Firebase on startup"""
+    """Initialize Firebase on startup (non-fatal if missing)"""
     logger.info("Starting Family Finance API...")
     try:
         initialize_firebase()
         logger.info("Firebase initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize Firebase: {e}")
-        raise
+        logger.warning(f"Firebase initialization failed (non-fatal, Supabase will be used): {e}")
 
 
 

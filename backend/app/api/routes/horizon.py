@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from datetime import datetime, timedelta, date
 from typing import Any
@@ -33,7 +33,7 @@ def _months_between(start: date, end: date) -> int:
 @router.get("/horizon")
 def get_horizon(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -44,25 +44,18 @@ def get_horizon(
                 return cached["data"]
         now = datetime.utcnow().date()
         horizon = now + timedelta(days=60)
-        budget_ref = 2000000  # referencia suave para alertas
+        budget_ref = 2000000
 
         items: list[dict[str, Any]] = []
 
-        # Commitments (next_date)
-        commitments_docs = db.collection("households").document(household_id)\
-            .collection("commitments").limit(200).stream()
-        for doc in commitments_docs:
-            data = doc.to_dict()
+        # Commitments
+        comm_resp = supabase.table("commitments").select("*").eq("household_id", household_id).execute()
+        for data in comm_resp.data:
             next_date = _parse_date(data.get("next_date"))
-            
-            # Check if paid this month
             last_paid = _parse_date(data.get("last_paid_at"))
             is_paid_this_month = last_paid and last_paid.month == now.month and last_paid.year == now.year
-            
             if is_paid_this_month:
                 continue
-                
-            # Include if next_date is in the past (overdue) OR within the 60-day horizon
             if next_date and next_date <= horizon:
                 severity = "high"
                 if next_date < now:
@@ -78,11 +71,9 @@ def get_horizon(
                     "impact_pct": round((float(data.get("amount", 0) or 0) / budget_ref) * 100, 1) if budget_ref else 0
                 })
 
-        # Events (date)
-        events_docs = db.collection("households").document(household_id)\
-            .collection("events").limit(200).stream()
-        for doc in events_docs:
-            data = doc.to_dict()
+        # Events
+        evt_resp = supabase.table("events").select("*").eq("household_id", household_id).execute()
+        for data in evt_resp.data:
             event_date = _parse_date(data.get("date"))
             if not event_date or not (now <= event_date <= horizon):
                 continue
@@ -106,7 +97,6 @@ def get_horizon(
                 "impact_pct": round((monthly_amount / budget_ref) * 100, 1) if budget_ref else 0
             })
 
-        # Sort by date
         items.sort(key=lambda x: x.get("date", ""))
 
         result = items[:20]

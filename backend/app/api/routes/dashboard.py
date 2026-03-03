@@ -1,10 +1,8 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.firebase import get_firestore
 from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from app.services.dashboard_service import DashboardService
-from google.cloud.firestore import Client as FirestoreClient
 from supabase import Client as SupabaseClient
 
 router = APIRouter()
@@ -13,7 +11,6 @@ router = APIRouter()
 def get_dashboard_summary(
     month: Optional[str] = None,
     user: dict = Depends(get_current_user),
-    db: FirestoreClient = Depends(get_firestore),
     supabase: SupabaseClient = Depends(get_supabase)
 ):
     """
@@ -23,7 +20,7 @@ def get_dashboard_summary(
     - Upcoming Items
     """
     try:
-        service = DashboardService(db, supabase)
+        service = DashboardService(supabase)
         return service.get_dashboard_summary(user['household_id'], month=month)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -32,14 +29,13 @@ def get_dashboard_summary(
 def update_dashboard_settings(
     settings: dict,
     user: dict = Depends(get_current_user),
-    db: FirestoreClient = Depends(get_firestore),
     supabase: SupabaseClient = Depends(get_supabase)
 ):
     """
     Update Household Settings (e.g. food_budget)
     """
     try:
-        service = DashboardService(db, supabase)
+        service = DashboardService(supabase)
         service.update_settings(user['household_id'], settings)
         return {"status": "success"}
     except Exception as e:

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from datetime import datetime
 from typing import Optional
@@ -9,11 +9,10 @@ router = APIRouter()
 _CACHE = {}
 _CACHE_TTL_SECONDS = 60
 
-
 @router.get("/incomes")
 def list_incomes(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -22,25 +21,10 @@ def list_incomes(
         if cached and cached.get("ts") and cached.get("data"):
             if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return cached["data"]
-        docs = db.collection("households").document(household_id)\
-            .collection("incomes")\
-            .limit(200)\
-            .stream()
+                
+        response = supabase.table("incomes").select("*").eq("household_id", household_id).execute()
+        results = response.data
 
-        results = []
-        for doc in docs:
-            data = doc.to_dict()
-            results.append({
-                "id": doc.id,
-                "name": data.get("name"),
-                "amount": data.get("amount"),
-                "frequency": data.get("frequency", "monthly"),
-                "is_variable": data.get("is_variable", False),
-                "month": data.get("month"),
-                "min_amount": data.get("min_amount"),
-                "next_date": data.get("next_date"),
-                "created_at": data.get("created_at").isoformat() if hasattr(data.get("created_at"), "isoformat") else (data.get("created_at") or "")
-            })
         _CACHE[household_id] = {"ts": now, "data": results}
         return results
     except Exception as e:
@@ -51,7 +35,7 @@ def list_incomes(
 def create_income(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -70,9 +54,11 @@ def create_income(
 
         if is_variable and month:
             frequency = "one_time"
-            next_date = f"{month}-01"
+            if len(month) == 7: # YYYY-MM
+                next_date = f"{month}-01"
 
         income_data = {
+            "household_id": household_id,
             "name": name,
             "amount": float(amount),
             "frequency": frequency,
@@ -80,14 +66,12 @@ def create_income(
             "is_variable": is_variable,
             "month": month,
             "min_amount": float(min_amount) if min_amount is not None else None,
-            "created_at": datetime.now()
         }
 
-        _, ref = db.collection("households").document(household_id)\
-            .collection("incomes").add(income_data)
+        response = supabase.table("incomes").insert(income_data).execute()
 
         _CACHE.pop(household_id, None)
-        return {"id": ref.id, "success": True}
+        return {"id": response.data[0]["id"], "success": True}
     except HTTPException:
         raise
     except Exception as e:
@@ -99,14 +83,13 @@ def update_income(
     income_id: str,
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
-        doc_ref = db.collection("households").document(household_id)\
-            .collection("incomes").document(income_id)
-        doc = doc_ref.get()
-        if not doc.exists:
+        # Basic check
+        existing = supabase.table("incomes").select("id").eq("id", income_id).eq("household_id", household_id).execute()
+        if not existing.data:
             raise HTTPException(status_code=404, detail="Income not found")
 
         updates = {}
@@ -127,9 +110,11 @@ def update_income(
 
         if updates.get("is_variable") and updates.get("month"):
             updates["frequency"] = "one_time"
-            updates["next_date"] = f"{updates['month']}-01"
+            if len(updates["month"]) == 7:
+                updates["next_date"] = f"{updates['month']}-01"
 
-        doc_ref.set(updates, merge=True)
+        supabase.table("incomes").update(updates).eq("id", income_id).execute()
+        
         _CACHE.pop(household_id, None)
         return {"success": True}
     except HTTPException:
@@ -142,17 +127,16 @@ def update_income(
 def delete_income(
     income_id: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
-        doc_ref = db.collection("households").document(household_id)\
-            .collection("incomes").document(income_id)
-        doc = doc_ref.get()
-        if not doc.exists:
+        # Basic check
+        existing = supabase.table("incomes").select("id").eq("id", income_id).eq("household_id", household_id).execute()
+        if not existing.data:
             raise HTTPException(status_code=404, detail="Income not found")
 
-        doc_ref.delete()
+        supabase.table("incomes").delete().eq("id", income_id).execute()
         _CACHE.pop(household_id, None)
         return {"success": True}
     except HTTPException:

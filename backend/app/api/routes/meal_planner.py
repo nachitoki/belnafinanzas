@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from datetime import datetime, date
 from typing import List, Optional
@@ -20,35 +20,19 @@ def get_meal_plan(
     start_date: str,
     end_date: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
-    """
-    Get meal plan for a date range.
-    """
+    """Get meal plan for a date range."""
     try:
         household_id = user["household_id"]
         
-        # Parse dates
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-        
-        # Convert to datetime for Firestore query (assuming occurred_on/date is stored as string or timestamp)
-        # Actually, let's store 'date' as a string YYYY-MM-DD in the document ID for easy upsert, 
-        # or just query by the field 'date'. 
-        
-        # Query
-        # We store meals in a subcollection 'meal_plans'
-        docs = db.collection("households").document(household_id)\
-            .collection("meal_plans")\
-            .where("date", ">=", start_date)\
-            .where("date", "<=", end_date)\
-            .stream()
+        resp = supabase.table("meal_plans").select("*")\
+            .eq("household_id", household_id)\
+            .gte("date", start_date)\
+            .lte("date", end_date)\
+            .execute()
             
-        results = []
-        for doc in docs:
-            results.append(doc.to_dict())
-            
-        return results
+        return resp.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -56,27 +40,20 @@ def get_meal_plan(
 def save_meal_plan(
     meals: List[MealPlanPayload],
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
-    """
-    Save (Upsert) meal plan entries.
-    """
+    """Save (Upsert) meal plan entries."""
     try:
         household_id = user["household_id"]
-        batch = db.batch()
-        collection_ref = db.collection("households").document(household_id).collection("meal_plans")
         
         for meal in meals:
-            # Create a deterministic ID: YYYY-MM-DD_type
-            doc_id = f"{meal.date}_{meal.type}"
-            doc_ref = collection_ref.document(doc_id)
-            
             data = meal.dict()
-            data["updated_at"] = datetime.utcnow()
+            data["household_id"] = household_id
+            data["updated_at"] = datetime.utcnow().isoformat()
             
-            batch.set(doc_ref, data, merge=True)
+            # Upsert by household_id + date + type
+            supabase.table("meal_plans").upsert(data, on_conflict="household_id,date,type").execute()
             
-        batch.commit()
         return {"success": True, "count": len(meals)}
         
     except Exception as e:

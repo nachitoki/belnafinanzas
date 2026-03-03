@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
-from app.core.auth import get_current_user
-from app.core.supabase import get_supabase
 from supabase import Client as SupabaseClient
+from app.core.supabase import get_supabase
+from app.core.auth import get_current_user
 from app.services.dashboard_service import DashboardService
 from datetime import datetime, date
 
@@ -24,7 +22,6 @@ def _to_iso(value) -> str:
 def _build_update_payload(payload: dict) -> dict:
     updates = {}
     if not payload:
-        updates["updated_at"] = datetime.now()
         return updates
 
     if "text" in payload:
@@ -46,20 +43,18 @@ def _build_update_payload(payload: dict) -> dict:
     if "impact" in payload:
         updates["impact"] = payload.get("impact")
 
-    updates["updated_at"] = datetime.now()
     return updates
 
 
-def _apply_bitacora_updates(entry_id: str, payload: dict, user: dict, db: Client) -> dict:
+def _apply_bitacora_updates(entry_id: str, payload: dict, user: dict, supabase: SupabaseClient) -> dict:
     household_id = user["household_id"]
-    doc_ref = db.collection("households").document(household_id)\
-        .collection("bitacora").document(entry_id)
-    doc = doc_ref.get()
-    if not doc.exists:
+    existing = supabase.table("bitacora").select("id").eq("id", entry_id).eq("household_id", household_id).execute()
+    if not existing.data:
         raise HTTPException(status_code=404, detail="Bitacora entry not found")
 
     updates = _build_update_payload(payload or {})
-    doc_ref.set(updates, merge=True)
+    if updates:
+        supabase.table("bitacora").update(updates).eq("id", entry_id).execute()
     return {"success": True}
 
 
@@ -120,7 +115,6 @@ def _build_observation_candidates(summary: dict) -> list[dict]:
             "evidence": f"Eventos obligatorios: {events_mandatory}. Opcionales: {events_optional}."
         })
 
-    # Limit to top 3 observations
     return candidates[:3]
 
 
@@ -168,42 +162,13 @@ def _build_pattern_candidates(summary: dict) -> list[dict]:
 @router.get("/bitacora")
 def list_bitacora(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore),
     supabase: SupabaseClient = Depends(get_supabase),
     limit: int = Query(100, ge=1, le=200)
 ):
     try:
         household_id = user["household_id"]
-        
-        # Primero intentamos con Supabase (SQL)
-        if supabase:
-            res = supabase.table("bitacora").select("*").eq("household_id", household_id).order("created_at", desc=True).limit(limit).execute()
-            return res.data
-
-        # Fallback a Firestore (Legacy)
-        entries_ref = db.collection("households").document(household_id).collection("bitacora")
-        docs = entries_ref.order_by("created_at", direction="DESCENDING").limit(limit).stream()
-
-        entries = []
-        for doc in docs:
-            data = doc.to_dict()
-            entries.append({
-                "id": doc.id,
-                "text": data.get("text"),
-                "kind": data.get("kind", "nota"),
-                "answer": data.get("answer"),
-                "meta": data.get("meta"),
-                "source_id": data.get("source_id"),
-                "created_at": _to_iso(data.get("created_at")),
-                "updated_at": _to_iso(data.get("updated_at")),
-                "status": data.get("status", "active"),
-                "created_by": data.get("created_by"),
-                "title": data.get("title"),
-                "summary": data.get("summary"),
-                "detail": data.get("detail"),
-                "impact": data.get("impact")
-            })
-        return entries
+        res = supabase.table("bitacora").select("*").eq("household_id", household_id).order("created_at", desc=True).limit(limit).execute()
+        return res.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -212,7 +177,6 @@ def list_bitacora(
 def create_bitacora(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore),
     supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
@@ -222,43 +186,30 @@ def create_bitacora(
             raise HTTPException(status_code=400, detail="text is required")
 
         kind = (payload.get("kind") or "nota").strip()
-        now = datetime.now()
         
-        if supabase:
-            data_sq = {
-                "household_id": household_id,
-                "text": text,
-                "kind": kind,
-                "meta": payload.get("meta") or {}
-            }
-            res = supabase.table("bitacora").insert(data_sq).execute()
-            return {"id": res.data[0]["id"] if res.data else None, "success": True}
-
-        # Fallback Firestore
-        data = {
+        data_sq = {
+            "household_id": household_id,
             "text": text,
             "kind": kind,
+            "meta": payload.get("meta") or {},
             "status": payload.get("status") or "active",
-            "created_at": now,
-            "updated_at": now,
-            "created_by": user.get("user_id")
+            "created_by": user.get("user_id"),
         }
         if payload.get("answer") is not None:
-            data["answer"] = payload.get("answer")
-        if payload.get("meta") is not None:
-            data["meta"] = payload.get("meta")
+            data_sq["answer"] = payload.get("answer")
         if payload.get("source_id") is not None:
-            data["source_id"] = payload.get("source_id")
+            data_sq["source_id"] = payload.get("source_id")
         if payload.get("title") is not None:
-            data["title"] = payload.get("title")
+            data_sq["title"] = payload.get("title")
         if payload.get("summary") is not None:
-            data["summary"] = payload.get("summary")
+            data_sq["summary"] = payload.get("summary")
         if payload.get("detail") is not None:
-            data["detail"] = payload.get("detail")
+            data_sq["detail"] = payload.get("detail")
         if payload.get("impact") is not None:
-            data["impact"] = payload.get("impact")
-        _, ref = db.collection("households").document(household_id).collection("bitacora").add(data)
-        return {"id": ref.id, "success": True}
+            data_sq["impact"] = payload.get("impact")
+            
+        res = supabase.table("bitacora").insert(data_sq).execute()
+        return {"id": res.data[0]["id"] if res.data else None, "success": True}
     except HTTPException:
         raise
     except Exception as e:
@@ -275,16 +226,12 @@ def save_salary_plan(
     Guarda las decisiones tomadas en el SalaryPlanner. 
     Inserta gastos en transactions si no existen duplicados.
     """
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
-        
     household_id = user["household_id"]
     decisions = payload.get("decisions", {})
     summary = payload.get("summary", {})
     now = datetime.now()
     month_str = now.strftime("%Y-%m")
     
-    # 1. Registrar entrada en Bitácora
     plan_entry = {
         "household_id": household_id,
         "text": f"Plan Salarial Marzo: Saldo final ${summary.get('balance', 0):,}",
@@ -297,8 +244,6 @@ def save_salary_plan(
     }
     supabase.table("bitacora").insert(plan_entry).execute()
 
-    # 2. Lógica de Sincronización de Gastos (No-Duplicidad)
-    # Buscamos transacciones del mes actual para comparar
     month_start = date(now.year, now.month, 1).isoformat()
     existing_trans = supabase.table("transactions")\
         .select("description, amount")\
@@ -315,7 +260,6 @@ def save_salary_plan(
 
     new_txs = []
     
-    # Matrícula
     if decisions.get("payMatricula") and not exists("Matrícula", 100000):
         new_txs.append({
             "household_id": household_id,
@@ -325,7 +269,6 @@ def save_salary_plan(
             "status": "posted"
         })
 
-    # Viaje Coyhaique
     if decisions.get("goCoyhaique") and not exists("Coyhaique", 65000):
         new_txs.append({
             "household_id": household_id,
@@ -344,13 +287,13 @@ def save_salary_plan(
 @router.post("/bitacora/auto-observations")
 def auto_observations(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
         summary = None
         try:
-            summary = DashboardService(db).get_dashboard_summary(household_id)
+            summary = DashboardService(supabase).get_dashboard_summary(household_id)
         except Exception:
             summary = None
 
@@ -358,17 +301,12 @@ def auto_observations(
         if not candidates:
             return {"created": 0, "items": []}
 
-        existing = db.collection("households").document(household_id)\
-            .collection("bitacora").limit(200).stream()
+        existing = supabase.table("bitacora").select("source_id").eq("household_id", household_id).execute()
         existing_source_ids = set()
-        for doc in existing:
-            data = doc.to_dict()
-            source_id = data.get("source_id")
-            if source_id:
-                existing_source_ids.add(source_id)
-
-        context_text = ""
-        advisor = None
+        for row in existing.data:
+            sid = row.get("source_id")
+            if sid:
+                existing_source_ids.add(sid)
 
         created_items = []
         now = datetime.now()
@@ -377,15 +315,9 @@ def auto_observations(
                 continue
             summary_text = cand.get("summary") or cand.get("title")
             detail_text = cand.get("evidence") or ""
-            if advisor:
-                try:
-                    summary_text = advisor.generate_observation(
-                        cand["title"], cand["impact"], context_text, cand.get("evidence")
-                    )
-                except Exception:
-                    summary_text = cand.get("summary") or cand.get("title")
 
             data = {
+                "household_id": household_id,
                 "text": cand["title"],
                 "title": cand["title"],
                 "summary": summary_text,
@@ -393,15 +325,12 @@ def auto_observations(
                 "impact": cand["impact"],
                 "kind": "observation",
                 "status": "active",
-                "created_at": now,
-                "updated_at": now,
                 "created_by": user.get("user_id"),
                 "meta": {"source": "auto", "evidence": cand.get("evidence")},
                 "source_id": cand["source_id"]
             }
-            _, ref = db.collection("households").document(household_id)\
-                .collection("bitacora").add(data)
-            created_items.append({"id": ref.id, "title": cand["title"]})
+            res = supabase.table("bitacora").insert(data).execute()
+            created_items.append({"id": res.data[0]["id"] if res.data else None, "title": cand["title"]})
 
         return {"created": len(created_items), "items": created_items}
     except HTTPException:
@@ -412,13 +341,13 @@ def auto_observations(
 @router.post("/bitacora/auto-patterns")
 def auto_patterns(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
         summary = None
         try:
-            summary = DashboardService(db).get_dashboard_summary(household_id)
+            summary = DashboardService(supabase).get_dashboard_summary(household_id)
         except Exception:
             summary = None
 
@@ -426,17 +355,12 @@ def auto_patterns(
         if not candidates:
             return {"created": 0, "items": []}
 
-        existing = db.collection("households").document(household_id)\
-            .collection("bitacora").limit(200).stream()
+        existing = supabase.table("bitacora").select("source_id").eq("household_id", household_id).execute()
         existing_source_ids = set()
-        for doc in existing:
-            data = doc.to_dict()
-            source_id = data.get("source_id")
-            if source_id:
-                existing_source_ids.add(source_id)
-
-        context_text = ""
-        advisor = None
+        for row in existing.data:
+            sid = row.get("source_id")
+            if sid:
+                existing_source_ids.add(sid)
 
         created_items = []
         now = datetime.now()
@@ -445,15 +369,9 @@ def auto_patterns(
                 continue
             summary_text = cand.get("summary") or cand.get("title")
             detail_text = cand.get("evidence") or ""
-            if advisor:
-                try:
-                    summary_text = advisor.generate_pattern(
-                        cand["title"], context_text, cand.get("evidence")
-                    )
-                except Exception:
-                    summary_text = cand.get("summary") or cand.get("title")
 
             data = {
+                "household_id": household_id,
                 "text": cand["title"],
                 "title": cand["title"],
                 "summary": summary_text,
@@ -461,15 +379,12 @@ def auto_patterns(
                 "impact": cand["impact"],
                 "kind": "pattern",
                 "status": "active",
-                "created_at": now,
-                "updated_at": now,
                 "created_by": user.get("user_id"),
                 "meta": {"source": "auto", "evidence": cand.get("evidence")},
                 "source_id": cand["source_id"]
             }
-            _, ref = db.collection("households").document(household_id)\
-                .collection("bitacora").add(data)
-            created_items.append({"id": ref.id, "title": cand["title"]})
+            res = supabase.table("bitacora").insert(data).execute()
+            created_items.append({"id": res.data[0]["id"] if res.data else None, "title": cand["title"]})
 
         return {"created": len(created_items), "items": created_items}
     except HTTPException:
@@ -481,7 +396,7 @@ def auto_patterns(
 def ask_bitacora(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
         question = (payload.get("question") or payload.get("text") or "").strip()
@@ -491,7 +406,7 @@ def ask_bitacora(
         extra_context = payload.get("context") or ""
         summary = None
         try:
-            summary = DashboardService(db).get_dashboard_summary(user["household_id"])
+            summary = DashboardService(supabase).get_dashboard_summary(user["household_id"])
         except Exception:
             summary = None
 
@@ -507,7 +422,7 @@ def ask_bitacora(
 def simulate_bitacora(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
         title = (payload.get("title") or payload.get("text") or "").strip()
@@ -515,20 +430,9 @@ def simulate_bitacora(
             raise HTTPException(status_code=400, detail="title is required")
 
         meta = payload.get("meta") or {}
-        category = payload.get("category") or meta.get("category")
         cost = payload.get("estimated_cost") or meta.get("estimated_cost")
         horizon_months = payload.get("horizon_months") or meta.get("horizon_months")
-        tco_total = payload.get("tco_total") or meta.get("tco_total")
-        extra_context = payload.get("context") or ""
 
-        summary = None
-        try:
-            summary = DashboardService(db).get_dashboard_summary(user["household_id"])
-        except Exception:
-            summary = None
-        context_text = ""
-
-        # Mock simulation for now
         simulation = {
             "title": title,
             "feasibility": "neutral",
@@ -549,7 +453,7 @@ def simulate_bitacora(
         return {
             "simulation": simulation,
             "monthly_target": monthly_target,
-            "context": context_text
+            "context": ""
         }
     except HTTPException:
         raise
@@ -560,32 +464,14 @@ def simulate_bitacora(
 def get_bitacora_entry(
     entry_id: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
-        doc_ref = db.collection("households").document(household_id)\
-            .collection("bitacora").document(entry_id)
-        doc = doc_ref.get()
-        if not doc.exists:
+        resp = supabase.table("bitacora").select("*").eq("id", entry_id).eq("household_id", household_id).execute()
+        if not resp.data:
             raise HTTPException(status_code=404, detail="Bitacora entry not found")
-        data = doc.to_dict()
-        return {
-            "id": doc.id,
-            "text": data.get("text"),
-            "kind": data.get("kind", "nota"),
-            "answer": data.get("answer"),
-            "meta": data.get("meta"),
-            "source_id": data.get("source_id"),
-            "created_at": _to_iso(data.get("created_at")),
-            "updated_at": _to_iso(data.get("updated_at")),
-            "status": data.get("status", "active"),
-            "created_by": data.get("created_by"),
-            "title": data.get("title"),
-            "summary": data.get("summary"),
-            "detail": data.get("detail"),
-            "impact": data.get("impact")
-        }
+        return resp.data[0]
     except HTTPException:
         raise
     except Exception as e:
@@ -597,10 +483,10 @@ def update_bitacora(
     entry_id: str,
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
-        return _apply_bitacora_updates(entry_id, payload, user, db)
+        return _apply_bitacora_updates(entry_id, payload, user, supabase)
     except HTTPException:
         raise
     except Exception as e:
@@ -611,13 +497,11 @@ def update_bitacora_action(
     entry_id: str,
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     try:
-        return _apply_bitacora_updates(entry_id, payload, user, db)
+        return _apply_bitacora_updates(entry_id, payload, user, supabase)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-

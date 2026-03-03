@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
-from google.cloud.firestore import Client as FirestoreClient
 from supabase import Client as SupabaseClient
 from app.domain.models import Transaction, RecurringItem, ProductPrice, HouseholdSignals, Status
 from app.domain.logic import (
@@ -15,8 +14,7 @@ _CACHE = {}
 _CACHE_TTL_SECONDS = 60  # Cache dashboard results for 60 seconds
 
 class DashboardService:
-    def __init__(self, db: FirestoreClient, supabase: SupabaseClient = None):
-        self.db = db
+    def __init__(self, supabase: SupabaseClient):
         self.supabase = supabase
 
     def get_dashboard_summary(self, household_id: str, month: str = None) -> Dict[str, Any]:
@@ -33,22 +31,11 @@ class DashboardService:
         target_date = now
         if month:
             try:
-                # Expecting YYYY-MM
                 target_date = datetime.strptime(month, "%Y-%m")
             except:
                 pass
 
-        # Si tenemos Supabase, usamos el motor SQL veloz
-        if self.supabase:
-            try:
-                result = self._get_summary_supabase(household_id, target_date)
-            except Exception as e:
-                from loguru import logger
-                logger.error(f"Supabase dashboard failed, falling back to Firestore: {e}")
-                result = self._get_summary_firestore(household_id, target_date)
-        else:
-            # Fallback a Firestore (Lento)
-            result = self._get_summary_firestore(household_id, target_date)
+        result = self._get_summary_supabase(household_id, target_date)
         
         _CACHE[cache_key] = {"ts": now, "data": result}
         return result
@@ -72,24 +59,7 @@ class DashboardService:
         
         return self._process_dashboard_data(household_id, target_date, trans_list, commitments, events, incomes, cat_map)
 
-    def _get_summary_firestore(self, household_id: str, target_date: datetime) -> Dict[str, Any]:
-        # Lógica original de Firestore (encapsulada)
-        month_start = datetime(target_date.year, target_date.month, 1)
-        query_start = month_start - timedelta(days=45)
-        
-        trans_docs = self.db.collection('households').document(household_id).collection('transactions').where('occurred_on', '>=', query_start).limit(300).stream()
-        comm_docs = self.db.collection('households').document(household_id).collection('commitments').limit(200).stream()
-        event_docs = self.db.collection('households').document(household_id).collection('events').limit(200).stream()
-        income_docs = self.db.collection('households').document(household_id).collection('incomes').limit(200).stream()
-        cats_ref = self.db.collection('households').document(household_id).collection('categories').stream()
-        
-        cat_map = {c.id: c.to_dict() for c in cats_ref}
-        trans_list = [d.to_dict() for d in trans_docs]
-        commitments = [d.to_dict() for d in comm_docs]
-        events = [d.to_dict() for d in event_docs]
-        incomes = [d.to_dict() for d in income_docs]
-        
-        return self._process_dashboard_data(household_id, target_date, trans_list, commitments, events, incomes, cat_map)
+
 
     def _process_dashboard_data(self, household_id: str, target_date: datetime, trans_list: List[Dict], commitments: List[Dict], events: List[Dict], incomes: List[Dict], cat_map: Dict) -> Dict[str, Any]:
         now = datetime.utcnow()
@@ -282,10 +252,10 @@ class DashboardService:
 
         # 7. Food Budget Logic
         # Fetch budget from household metadata or default
-        household_ref = self.db.collection('households').document(household_id)
-        household_snap = household_ref.get()
-        household_data = household_snap.to_dict() if household_snap.exists else {}
-        settings_data = household_data.get('settings', {})
+        resp = self.supabase.table('households').select('settings').eq('id', household_id).execute()
+        settings_data = {}
+        if resp.data and resp.data[0].get('settings'):
+             settings_data = resp.data[0]['settings']
         
         # User requested 500k default
         food_budget_limit = float(settings_data.get('food_budget', 500000))
@@ -362,14 +332,17 @@ class DashboardService:
 
     def update_settings(self, household_id: str, updates: Dict[str, Any]) -> None:
         """Update household settings (e.g. food_budget)"""
-        ref = self.db.collection('households').document(household_id)
-        # Use set with merge to update deep fields map
-        # Firestore dot notation for nested update
-        update_dict = {}
-        for k, v in updates.items():
-            update_dict[f"settings.{k}"] = v
+        # First retrieve existing settings
+        resp = self.supabase.table('households').select('settings').eq('id', household_id).execute()
+        current_settings = {}
+        if resp.data and resp.data[0].get('settings'):
+            current_settings = resp.data[0]['settings']
             
-        ref.update(update_dict)
+        # Merge updates
+        for k, v in updates.items():
+            current_settings[k] = v
+            
+        self.supabase.table('households').update({'settings': current_settings}).eq('id', household_id).execute()
         # Invalidate cache
         _CACHE.pop(household_id, None)
 

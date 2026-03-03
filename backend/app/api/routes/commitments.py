@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from datetime import datetime, timedelta, date
 from typing import Optional
@@ -10,11 +10,10 @@ router = APIRouter()
 _CACHE = {}
 _CACHE_TTL_SECONDS = 60
 
-
 @router.get("/commitments")
 def list_commitments(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -24,39 +23,24 @@ def list_commitments(
             if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return cached["data"]
         
-        print(f"DEBUG: Fetching commitments for {household_id} from Firestore")
-        docs = db.collection("households").document(household_id)\
-            .collection("commitments")\
-            .limit(200)\
-            .stream()
-
+        print(f"DEBUG: Fetching commitments for {household_id} from Supabase")
+        response = supabase.table("commitments").select("*").eq("household_id", household_id).execute()
+        
         results = []
-        for doc in docs:
-            data = doc.to_dict()
-            try:
-                # Robust created_at
-                created_at_raw = data.get("created_at")
-                if hasattr(created_at_raw, "isoformat"):
-                    created_at = created_at_raw.isoformat()
-                else:
-                    created_at = str(created_at_raw or "")
-
-                results.append({
-                    "id": doc.id,
-                    "name": data.get("name"),
-                    "amount": data.get("amount"),
-                    "frequency": data.get("frequency", "monthly"),
-                    "flow_category": data.get("flow_category"),
-                    "next_date": data.get("next_date"),
-                    "installments_total": data.get("installments_total", 0),
-                    "installments_paid": data.get("installments_paid", 0),
-                    "is_variable": data.get("is_variable", False),
-                    "last_paid_at": data.get("last_paid_at"),
-                    "created_at": created_at
-                })
-            except Exception as item_err:
-                print(f"DEBUG: Error processing item {doc.id}: {item_err}")
-                continue
+        for data in response.data:
+            results.append({
+                "id": data.get("id"),
+                "name": data.get("name"),
+                "amount": data.get("amount"),
+                "frequency": data.get("frequency", "monthly"),
+                "flow_category": data.get("flow_category"),
+                "next_date": data.get("next_date"),
+                "installments_total": data.get("installments_total", 0),
+                "installments_paid": data.get("installments_paid", 0),
+                "is_variable": data.get("is_variable", False),
+                "last_paid_at": data.get("last_paid_at"),
+                "created_at": data.get("created_at")
+            })
         
         # Synthetic Commitments Logic
         try:
@@ -67,25 +51,13 @@ def list_commitments(
             shopping_keywords = ["compra grande", "jumbo", "lider", "unimarc", "supermercado", "tottus", "santa isabel"]
             has_real_shopping = any(any(k in (c.get("name") or "").lower() for k in shopping_keywords) for c in results)
 
-            meal_docs = db.collection("households").document(household_id)\
-                .collection("meal_plans")\
-                .where("date", ">=", start_of_month)\
-                .stream()
-                
-            meals_total = 0
-            for m in meal_docs:
-                m_data = m.to_dict()
-                meals_total += int(m_data.get("recipe_cost") or 0)
+            # Meal Plans
+            meal_resp = supabase.table("meal_plans").select("recipe_cost").eq("household_id", household_id).gte("date", start_of_month).execute()
+            meals_total = sum((m.get("recipe_cost") or 0) for m in meal_resp.data)
                 
             # Fetch Extra Shopping Items for the month
-            shopping_docs = db.collection("households").document(household_id)\
-                .collection("shopping_list")\
-                .where("month", "==", current_month_str)\
-                .stream()
-            
-            extras_total = 0
-            for s in shopping_docs:
-                extras_total += int(s.to_dict().get("estimated_cost") or 0)
+            shop_resp = supabase.table("shopping_list").select("estimated_cost").eq("household_id", household_id).eq("month", current_month_str).execute()
+            extras_total = sum((s.get("estimated_cost") or 0) for s in shop_resp.data)
             
             # TOTAL = Meals + Extras
             compra_grande_total = meals_total + extras_total
@@ -149,7 +121,7 @@ def list_commitments(
 def create_commitment(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -165,6 +137,7 @@ def create_commitment(
             raise HTTPException(status_code=400, detail="name is required")
 
         commitment_data = {
+            "household_id": household_id,
             "name": name,
             "amount": float(amount),
             "frequency": frequency,
@@ -173,14 +146,12 @@ def create_commitment(
             "installments_total": installments_total,
             "installments_paid": installments_paid,
             "is_variable": bool(payload.get("is_variable", False)),
-            "created_at": datetime.now()
         }
 
-        _, ref = db.collection("households").document(household_id)\
-            .collection("commitments").add(commitment_data)
+        resp = supabase.table("commitments").insert(commitment_data).execute()
 
         _CACHE.pop(household_id, None)
-        return {"id": ref.id, "success": True}
+        return {"id": resp.data[0]["id"], "success": True}
     except HTTPException:
         raise
     except Exception as e:
@@ -216,17 +187,16 @@ def update_commitment(
     commitment_id: str,
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
-        ref = db.collection("households").document(household_id)\
-            .collection("commitments").document(commitment_id)
-        doc = ref.get()
-        if not doc.exists:
+        
+        doc_resp = supabase.table("commitments").select("*").eq("id", commitment_id).eq("household_id", household_id).execute()
+        if not doc_resp.data:
             raise HTTPException(status_code=404, detail="commitment not found")
-
-        data = doc.to_dict() or {}
+        data = doc_resp.data[0]
+        
         updates = {}
 
         action = payload.get("action")
@@ -252,29 +222,31 @@ def update_commitment(
                          updates["next_date"] = _add_months(curr_date, 12).isoformat()
                     elif freq == "one_time":
                          updates["next_date"] = None
-                         updates["status"] = "completed"
+                         updates["is_variable"] = False # to treat basically as completed if desired
                  except Exception:
                      pass
             
             if data.get("installments_total", 0) > 0:
                 paid = data.get("installments_paid", 0) + 1
                 updates["installments_paid"] = paid
-                if paid >= data.get("installments_total"):
-                     updates["status"] = "completed"
 
             try:
+                # Add transaction on pay
                 transaction_data = {
-                    "occurred_on": datetime.now(), 
+                    "household_id": household_id,
+                    "occurred_on": datetime.now().date().isoformat(), 
                     "amount": -abs(transaction_amount),
                     "description": f"Pago de {data.get('name')}",
-                    "category_id": data.get("flow_category") or "compromisos",
-                    "account_id": "default",
+                    "category_id": None, # Should be a valid uuid, omit or null for now
+                    "account_id": None,
                     "status": "posted",
-                    "source": "commitment",
-                    "commitment_id": commitment_id,
-                    "created_at": datetime.now()
+                    "source": "manual",
                 }
-                db.collection("households").document(household_id).collection("transactions").add(transaction_data)
+                # Since transaction needs valid FK, we'll try to get first account 
+                fallback = supabase.table("accounts").select("id").eq("household_id", household_id).limit(1).execute()
+                if fallback.data:
+                    transaction_data["account_id"] = fallback.data[0]["id"]
+                    supabase.table("transactions").insert(transaction_data).execute()
             except Exception as e:
                 print(f"Error creating transaction: {e}")
 
@@ -301,7 +273,7 @@ def update_commitment(
         if not updates:
             return {"success": True, "updated": False}
 
-        ref.update(updates)
+        supabase.table("commitments").update(updates).eq("id", commitment_id).execute()
         _CACHE.pop(household_id, None)
         return {"success": True, "updated": True}
     except HTTPException:
@@ -314,14 +286,11 @@ def update_commitment(
 def delete_commitment(
     commitment_id: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
-        ref = db.collection("households").document(household_id)\
-            .collection("commitments").document(commitment_id)
-        
-        ref.delete()
+        supabase.table("commitments").delete().eq("id", commitment_id).eq("household_id", household_id).execute()
         _CACHE.pop(household_id, None)
         return {"success": True, "deleted": True}
     except Exception as e:

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from pydantic import BaseModel
 from typing import List, Optional
@@ -10,7 +10,7 @@ import uuid
 router = APIRouter()
 
 class ShoppingItem(BaseModel):
-    id: Optional[str]
+    id: Optional[str] = None
     name: str
     estimated_cost: int
     is_checked: bool = False
@@ -20,50 +20,35 @@ class ShoppingItem(BaseModel):
 def get_shopping_list(
     month: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     """Get extra shopping items for a specific month"""
     household_id = user['household_id']
     
-    docs = db.collection('households').document(household_id)\
-        .collection('shopping_list')\
-        .where('month', '==', month)\
-        .stream()
-        
-    return [
-        {**d.to_dict(), "id": d.id} 
-        for d in docs
-    ]
+    resp = supabase.table('shopping_list').select('*').eq('household_id', household_id).eq('month', month).execute()
+    return resp.data
 
 @router.post("/shopping-list")
 def add_shopping_item(
     item: ShoppingItem,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     """Add a new item to the shopping list"""
     household_id = user['household_id']
     
     item_data = item.dict(exclude={'id'})
+    item_data['household_id'] = household_id
     
-    # If ID provided, update? No, let's treat POST as create for simplicity or UPSERT if ID exists?
-    # Let's do simple create.
-    
-    new_ref = db.collection('households').document(household_id)\
-        .collection('shopping_list').document()
-        
-    new_ref.set(item_data)
-    
-    return {**item_data, "id": new_ref.id}
+    resp = supabase.table('shopping_list').insert(item_data).execute()
+    return resp.data[0] if resp.data else {"success": True}
 
 @router.delete("/shopping-list/{item_id}")
 def delete_shopping_item(
     item_id: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     household_id = user['household_id']
-    db.collection('households').document(household_id)\
-        .collection('shopping_list').document(item_id).delete()
-        
+    supabase.table('shopping_list').delete().eq('id', item_id).eq('household_id', household_id).execute()
     return {"success": True}

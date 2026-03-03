@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from datetime import datetime, timedelta, date
 from typing import Optional
@@ -9,11 +9,10 @@ router = APIRouter()
 _CACHE = {}
 _CACHE_TTL_SECONDS = 60
 
-
 @router.get("/events")
 def list_events(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -22,23 +21,19 @@ def list_events(
         if cached and cached.get("ts") and cached.get("data"):
             if (now - cached["ts"]).total_seconds() < _CACHE_TTL_SECONDS:
                 return cached["data"]
-        docs = db.collection("households").document(household_id)\
-            .collection("events")\
-            .limit(200)\
-            .stream()
-
+                
+        response = supabase.table("events").select("*").eq("household_id", household_id).execute()
         results = []
-        for doc in docs:
-            data = doc.to_dict()
+        for data in response.data:
             results.append({
-                "id": doc.id,
+                "id": data.get("id"),
                 "name": data.get("name"),
                 "amount_estimate": data.get("amount_estimate"),
-                "event_type": data.get("event_type", "annual"),
+                "event_type": "annual", # Not in new schema directly, just default to annual
                 "date": data.get("date"),
                 "is_mandatory": data.get("is_mandatory", False),
-                "flow_category": data.get("flow_category"),
-                "created_at": data.get("created_at").isoformat() if hasattr(data.get("created_at"), "isoformat") else (data.get("created_at") or "")
+                # "flow_category": data.get("flow_category"),
+                "created_at": data.get("created_at")
             })
         _CACHE[household_id] = {"ts": now, "data": results}
         return results
@@ -50,16 +45,14 @@ def list_events(
 def create_event(
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
         name = (payload.get("name") or "").strip()
         amount_estimate = payload.get("amount_estimate", 0)
-        event_type = payload.get("event_type", "annual")
         date_value: Optional[str] = payload.get("date")
         is_mandatory = bool(payload.get("is_mandatory", False))
-        flow_category = payload.get("flow_category") or "provision"
 
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
@@ -67,20 +60,17 @@ def create_event(
             raise HTTPException(status_code=400, detail="date is required")
 
         event_data = {
+            "household_id": household_id,
             "name": name,
             "amount_estimate": float(amount_estimate),
-            "event_type": event_type,
             "date": date_value,
             "is_mandatory": is_mandatory,
-            "flow_category": flow_category,
-            "created_at": datetime.now()
         }
 
-        _, ref = db.collection("households").document(household_id)\
-            .collection("events").add(event_data)
+        resp = supabase.table("events").insert(event_data).execute()
 
         _CACHE.pop(household_id, None)
-        return {"id": ref.id, "success": True}
+        return {"id": resp.data[0]["id"], "success": True}
     except HTTPException:
         raise
     except Exception as e:
@@ -114,17 +104,16 @@ def update_event(
     event_id: str,
     payload: dict,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
-        ref = db.collection("households").document(household_id)\
-            .collection("events").document(event_id)
-        doc = ref.get()
-        if not doc.exists:
+        
+        doc_resp = supabase.table("events").select("*").eq("id", event_id).eq("household_id", household_id).execute()
+        if not doc_resp.data:
             raise HTTPException(status_code=404, detail="event not found")
 
-        data = doc.to_dict() or {}
+        data = doc_resp.data[0]
         updates = {}
 
         action = payload.get("action")
@@ -141,18 +130,32 @@ def update_event(
                 if days > 0:
                     updates["date"] = (current_date + timedelta(days=days)).isoformat()
 
-        # Direct field updates (optional)
-        for key in ["name", "amount_estimate", "event_type", "date", "is_mandatory", "flow_category"]:
+        for key in ["name", "amount_estimate", "date", "is_mandatory"]:
             if key in payload and payload[key] is not None:
                 updates[key] = payload[key]
 
         if not updates:
             return {"success": True, "updated": False}
 
-        ref.update(updates)
+        supabase.table("events").update(updates).eq("id", event_id).execute()
         _CACHE.pop(household_id, None)
         return {"success": True, "updated": True}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/events/{event_id}")
+def delete_event(
+    event_id: str,
+    user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    try:
+        household_id = user["household_id"]
+        supabase.table("events").delete().eq("id", event_id).eq("household_id", household_id).execute()
+        _CACHE.pop(household_id, None)
+        return {"success": True, "deleted": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
