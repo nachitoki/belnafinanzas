@@ -71,19 +71,34 @@ async def health_check():
         "telegram_bot": "configured" if settings.telegram_bot_token and "reemplazar" not in settings.telegram_bot_token else "not_configured"
     }
 
-@app.get("/debug/env")
-async def debug_env():
-    """Temporary debug endpoint to check config"""
-    import os
-    return {
-        "settings_supabase_url": bool(settings.supabase_url),
-        "settings_supabase_url_len": len(settings.supabase_url) if settings.supabase_url else 0,
-        "settings_supabase_url_prefix": settings.supabase_url[:30] if settings.supabase_url else "EMPTY",
-        "settings_supabase_key_len": len(settings.supabase_key) if settings.supabase_key else 0,
-        "os_env_SUPABASE_URL": bool(os.environ.get("SUPABASE_URL")),
-        "os_env_supabase_url": bool(os.environ.get("supabase_url")),
-        "settings_environment": settings.environment,
-    }
+@app.get("/debug/db")
+async def debug_db():
+    """Temporary debug endpoint to check DB state"""
+    try:
+        from app.core.supabase import get_supabase
+        supabase = get_supabase()
+        hh_resp = supabase.table("households").select("id, name").execute()
+        
+        counts = {}
+        for hh in hh_resp.data:
+            hid = hh["id"]
+            inc_count = supabase.table("incomes").select("id", count="exact").eq("household_id", hid).execute().count
+            com_count = supabase.table("commitments").select("id", count="exact").eq("household_id", hid).execute().count
+            trans_count = supabase.table("transactions").select("id", count="exact").eq("household_id", hid).execute().count
+            counts[hid] = {
+                "name": hh.get("name"),
+                "incomes": inc_count,
+                "commitments": com_count,
+                "transactions": trans_count
+            }
+            
+        return {
+            "households_found": len(hh_resp.data),
+            "stats": counts
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # Include routers
 app.include_router(receipts.router, prefix="/api", tags=["receipts"])
