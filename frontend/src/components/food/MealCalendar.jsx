@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getRecipes, getMeals, saveMeals, getShoppingList, addShoppingItem, deleteShoppingItem } from '../../services/api';
+import { getRecipes, getMeals, saveMeals, getShoppingList, addShoppingItem, deleteShoppingItem, getShoppingSuggestions } from '../../services/api';
 
 const MealCalendar = () => {
     const navigate = useNavigate();
@@ -20,6 +20,8 @@ const MealCalendar = () => {
     const [shoppingItems, setShoppingItems] = useState([]);
     const [newItemName, setNewItemName] = useState('');
     const [newItemCost, setNewItemCost] = useState('');
+    const [newItemQuantity, setNewItemQuantity] = useState(1);
+    const [suggestions, setSuggestions] = useState([]);
 
     // Selection state
     const [activeRecipe, setActiveRecipe] = useState('');
@@ -47,6 +49,11 @@ const MealCalendar = () => {
         if (saved) {
             try { setTemplates(JSON.parse(saved)); } catch (e) { }
         }
+
+        // Cargar sugerencias al inicio
+        getShoppingSuggestions('').then(data => {
+            setSuggestions(data || []);
+        }).catch(err => console.error(err));
     }, []);
 
     // Load Meals and Shopping List when view or date changes
@@ -114,6 +121,7 @@ const MealCalendar = () => {
 
             await saveMeals(payload);
             setSaving(false);
+            alert('¡Platos guardados con éxito!');
         } catch (e) {
             console.error(e);
             const detail = e.response?.data?.detail
@@ -295,6 +303,7 @@ const MealCalendar = () => {
             const item = {
                 name: newItemName,
                 estimated_cost: parseInt(newItemCost || '0'),
+                quantity: parseInt(newItemQuantity || '1'),
                 month: monthStr,
                 is_checked: false
             };
@@ -302,6 +311,7 @@ const MealCalendar = () => {
             setShoppingItems([...shoppingItems, added]);
             setNewItemName('');
             setNewItemCost('');
+            setNewItemQuantity(1);
         } catch (e) { alert('Error adding item'); }
     };
 
@@ -315,7 +325,7 @@ const MealCalendar = () => {
 
     const calculateShoppingTotal = () => {
         const mealsTotal = getMonthMealsTotal();
-        const extrasTotal = shoppingItems.reduce((acc, curr) => acc + (parseInt(curr.estimated_cost) || 0), 0);
+        const extrasTotal = shoppingItems.reduce((acc, curr) => acc + ((parseInt(curr.estimated_cost) || 0) * (parseInt(curr.quantity) || 1)), 0);
         return { mealsTotal, extrasTotal, grandTotal: mealsTotal + extrasTotal };
     };
 
@@ -369,29 +379,52 @@ const MealCalendar = () => {
                     </div>
 
                     <h4 style={{ marginBottom: '10px' }}>Insumos Extra</h4>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '150px' }}>
+                            <input
+                                placeholder="Ítem (ej: Detergente)"
+                                value={newItemName}
+                                onChange={e => {
+                                    setNewItemName(e.target.value);
+                                    // Autofill cost if match found
+                                    const match = suggestions.find(s => s.name.toLowerCase() === e.target.value.toLowerCase());
+                                    if (match && match.estimated_cost) {
+                                        setNewItemCost(match.estimated_cost);
+                                    }
+                                }}
+                                list="shopping-suggestions"
+                                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                            />
+                            <datalist id="shopping-suggestions">
+                                {suggestions.map((s, idx) => (
+                                    <option key={idx} value={s.name} />
+                                ))}
+                            </datalist>
+                        </div>
                         <input
-                            placeholder="Ítem (ej: Detergente)"
-                            value={newItemName}
-                            onChange={e => setNewItemName(e.target.value)}
-                            style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                            placeholder="Cant."
+                            type="number"
+                            min="1"
+                            value={newItemQuantity}
+                            onChange={e => setNewItemQuantity(e.target.value)}
+                            style={{ width: '60px', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
                         />
                         <input
-                            placeholder="$$"
+                            placeholder="$$c/u"
                             type="number"
                             value={newItemCost}
                             onChange={e => setNewItemCost(e.target.value)}
                             style={{ width: '80px', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
                         />
-                        <button onClick={handleAddShoppingItem} style={{ padding: '8px', background: 'var(--status-blue-main)', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>+</button>
+                        <button onClick={handleAddShoppingItem} style={{ padding: '8px 12px', background: 'var(--status-blue-main)', color: 'white', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>+</button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {shoppingItems.map(item => (
                             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', borderBottom: '1px solid #f0f0f0' }}>
                                 <div>
-                                    <div style={{ fontWeight: '600' }}>{item.name}</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#888' }}>${item.estimated_cost?.toLocaleString('es-CL')}</div>
+                                    <div style={{ fontWeight: '600' }}>{item.name} <span style={{ color: '#666', fontSize: '0.85rem' }}>x{item.quantity || 1}</span></div>
+                                    <div style={{ fontSize: '0.8rem', color: '#888' }}>${((item.estimated_cost || 0) * (item.quantity || 1)).toLocaleString('es-CL')}</div>
                                 </div>
                                 <button onClick={() => handleDeleteShoppingItem(item.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Eliminar</button>
                             </div>

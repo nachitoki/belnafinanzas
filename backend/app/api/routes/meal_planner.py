@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from fastapi import APIRouter, Depends, HTTPException
+from supabase import Client as SupabaseClient
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
-from datetime import datetime, date
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 class MealPlanPayload(BaseModel):
     date: str  # YYYY-MM-DD
@@ -20,64 +22,59 @@ def get_meal_plan(
     start_date: str,
     end_date: str,
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     """
-    Get meal plan for a date range.
+    Get meal plan for a date range from Supabase.
     """
     try:
         household_id = user["household_id"]
         
-        # Parse dates
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-        
-        # Convert to datetime for Firestore query (assuming occurred_on/date is stored as string or timestamp)
-        # Actually, let's store 'date' as a string YYYY-MM-DD in the document ID for easy upsert, 
-        # or just query by the field 'date'. 
-        
-        # Query
-        # We store meals in a subcollection 'meal_plans'
-        docs = db.collection("households").document(household_id)\
-            .collection("meal_plans")\
-            .where("date", ">=", start_date)\
-            .where("date", "<=", end_date)\
-            .stream()
+        # Query Supabase: date >= start_date AND date <= end_date
+        response = supabase.table("meal_plans") \
+            .select("*") \
+            .eq("household_id", household_id) \
+            .gte("date", start_date) \
+            .lte("date", end_date) \
+            .execute()
             
-        results = []
-        for doc in docs:
-            results.append(doc.to_dict())
-            
-        return results
+        return response.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching meals from Supabase: {e}")
+        raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
 
 @router.post("/meals")
 def save_meal_plan(
     meals: List[MealPlanPayload],
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: SupabaseClient = Depends(get_supabase)
 ):
     """
-    Save (Upsert) meal plan entries.
+    Save (Upsert) meal plan entries to Supabase.
     """
     try:
         household_id = user["household_id"]
-        batch = db.batch()
-        collection_ref = db.collection("households").document(household_id).collection("meal_plans")
         
+        # Build upsert payload
+        upsert_data = []
         for meal in meals:
-            # Create a deterministic ID: YYYY-MM-DD_type
-            doc_id = f"{meal.date}_{meal.type}"
-            doc_ref = collection_ref.document(doc_id)
+            # We enforce saving null instead of empty string if that's preferred, 
+            # but empty string is fine as long as frontend parses it.
+            record = meal.model_dump() if hasattr(meal, 'model_dump') else meal.dict()
+            record["household_id"] = household_id
+            upsert_data.append(record)
             
-            data = meal.dict()
-            data["updated_at"] = datetime.utcnow()
-            
-            batch.set(doc_ref, data, merge=True)
-            
-        batch.commit()
-        return {"success": True, "count": len(meals)}
+        if not upsert_data:
+            return {"success": True, "count": 0}
+
+        # Perform the bulk upsert (requires UNIQUE(household_id, date, type) on Supabase table)
+        response = supabase.table("meal_plans").upsert(
+            upsert_data, 
+            on_conflict="household_id, date, type"
+        ).execute()
+        
+        return {"success": True, "count": len(upsert_data)}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving meals to Supabase: {e}")
+        raise HTTPException(status_code=500, detail=f"Supabase error: {str(e)}")
