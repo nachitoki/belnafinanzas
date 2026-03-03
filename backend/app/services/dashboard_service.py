@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import List, Dict, Any
 from supabase import Client as SupabaseClient
 from app.domain.models import Transaction, RecurringItem, ProductPrice, HouseholdSignals, Status
@@ -18,7 +18,7 @@ class DashboardService:
         self.supabase = supabase
 
     def get_dashboard_summary(self, household_id: str, month: str = None) -> Dict[str, Any]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Cache key depends on the month
         cache_key = f"{household_id}_{month}" if month else household_id
@@ -31,7 +31,8 @@ class DashboardService:
         target_date = now
         if month:
             try:
-                target_date = datetime.strptime(month, "%Y-%m")
+                # target_date as midnight UTC
+                target_date = datetime.strptime(month, "%Y-%m").replace(tzinfo=timezone.utc)
             except:
                 pass
 
@@ -53,7 +54,7 @@ class DashboardService:
         cat_map = {c['id']: c for c in cat_list}
         
         # A) Transactions (last 45 days relative to target_date)
-        month_start = datetime(target_date.year, target_date.month, 1)
+        month_start = datetime(target_date.year, target_date.month, 1, tzinfo=timezone.utc)
         query_start = (month_start - timedelta(days=45)).isoformat()
         trans_list = self.supabase.table("transactions").select("*").eq("household_id", household_id).gte("occurred_on", query_start).execute().data
         
@@ -62,8 +63,8 @@ class DashboardService:
 
 
     def _process_dashboard_data(self, household_id: str, target_date: datetime, trans_list: List[Dict], commitments: List[Dict], events: List[Dict], incomes: List[Dict], cat_map: Dict) -> Dict[str, Any]:
-        now = datetime.utcnow()
-        month_start = datetime(target_date.year, target_date.month, 1)
+        now = datetime.now(timezone.utc)
+        month_start = datetime(target_date.year, target_date.month, 1, tzinfo=timezone.utc)
         all_transactions_data = []
         transactions_objects = []
         real_oxigeno = 0.0
@@ -72,15 +73,20 @@ class DashboardService:
 
         for data in trans_list:
             occurred_on = data.get('occurred_on')
-            if hasattr(occurred_on, 'timestamp'):
-                occurred_on = datetime.fromtimestamp(occurred_on.timestamp())
-            elif isinstance(occurred_on, str):
+            
+            if isinstance(occurred_on, str):
                 try:
+                    # ISO format parsing usually handles +00:00 correctly
                     occurred_on = datetime.fromisoformat(occurred_on.replace('Z', '+00:00'))
+                    if occurred_on.tzinfo is None:
+                        occurred_on = occurred_on.replace(tzinfo=timezone.utc)
                 except:
-                    occurred_on = datetime.utcnow()
+                    occurred_on = datetime.now(timezone.utc)
+            elif isinstance(occurred_on, datetime):
+                if occurred_on.tzinfo is None:
+                    occurred_on = occurred_on.replace(tzinfo=timezone.utc)
             else:
-                 occurred_on = datetime.utcnow()
+                 occurred_on = datetime.now(timezone.utc)
             
             data['parsed_date'] = occurred_on
             all_transactions_data.append(data)
@@ -150,8 +156,10 @@ class DashboardService:
 
         def _pdate(v):
             if not v: return None
-            if hasattr(v, 'date'): return v.date()
-            try: return datetime.fromisoformat(str(v)).date()
+            if hasattr(v, 'date') and not isinstance(v, str): return v.date()
+            try:
+                dt = datetime.fromisoformat(str(v).replace('Z', '+00:00'))
+                return dt.date()
             except: return None
         
         # Commitments Horizon
@@ -302,8 +310,8 @@ class DashboardService:
             is_paid = False
             if last_paid:
                 try:
-                    lp_date = datetime.fromisoformat(str(last_paid))
-                    if lp_date.strftime("%Y-%m") == current_month_str:
+                    lp_date = datetime.fromisoformat(str(last_paid).replace('Z', '+00:00'))
+                    if lp_date.year == now.year and lp_date.month == now.month:
                         is_paid = True
                 except: pass
             
@@ -347,12 +355,17 @@ class DashboardService:
         _CACHE.pop(household_id, None)
 
     def _compute_month_overview_memory(self, incomes, commitments, events, household_id, now, months_ahead=3):
-        month_start = datetime(now.year, now.month, 1)
+        # Ensure now is aware for comparison
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
 
         def parse_date(value):
             if not value: return None
-            if hasattr(value, "date"): return value.date()
-            try: return datetime.fromisoformat(str(value)).date()
+            if hasattr(value, "date") and not isinstance(value, str): return v.date() # Simplified but safe
+            try: 
+                dt = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                return dt.date()
             except: return None
         
         # Variable Incomes Logic
@@ -437,8 +450,11 @@ class DashboardService:
 
         projections = []
         for i in range(months_ahead + 1):
-             m_start = datetime(now.year, now.month, 1) + timedelta(days=31 * i)
-             m_end = m_start + timedelta(days=31)
+             # Simplified month increment logic
+             year = now.year + (now.month + i - 1) // 12
+             month = (now.month + i - 1) % 12 + 1
+             m_start = datetime(year, month, 1, tzinfo=timezone.utc)
+             m_end = datetime(year + (month // 12), (month % 12) + 1, 1, tzinfo=timezone.utc)
              def in_month(d): return d and m_start.date() <= d < m_end.date()
              
              inc = projected_variable_total(month_key(m_start))
