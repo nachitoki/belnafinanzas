@@ -77,27 +77,40 @@ async def debug_db():
     try:
         from app.core.supabase import get_supabase
         supabase = get_supabase()
+        
+        # 1. Households
         hh_resp = supabase.table("households").select("id, name").execute()
         
-        counts = {}
+        # 2. Total counts across all tables (no filter)
+        totals = {
+            "households": len(hh_resp.data),
+            "incomes_total": supabase.table("incomes").select("id", count="exact").execute().count,
+            "commitments_total": supabase.table("commitments").select("id", count="exact").execute().count,
+            "transactions_total": supabase.table("transactions").select("id", count="exact").execute().count,
+            "events_total": supabase.table("events").select("id", count="exact").execute().count,
+            "users_total": supabase.table("users").select("id", count="exact").execute().count
+        }
+        
+        # 3. Stats per household
+        hh_stats = {}
         for hh in hh_resp.data:
             hid = hh["id"]
-            inc_count = supabase.table("incomes").select("id", count="exact").eq("household_id", hid).execute().count
-            com_count = supabase.table("commitments").select("id", count="exact").eq("household_id", hid).execute().count
-            trans_count = supabase.table("transactions").select("id", count="exact").eq("household_id", hid).execute().count
-            counts[hid] = {
+            inc_c = supabase.table("incomes").select("id", count="exact").eq("household_id", hid).execute().count
+            com_c = supabase.table("commitments").select("id", count="exact").eq("household_id", hid).execute().count
+            hh_stats[hid] = {
                 "name": hh.get("name"),
-                "incomes": inc_count,
-                "commitments": com_count,
-                "transactions": trans_count
+                "incomes": inc_c,
+                "commitments": com_c
             }
             
         return {
-            "households_found": len(hh_resp.data),
-            "stats": counts
+            "totals": totals,
+            "households_detail": hh_stats
         }
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()}
+
 
 
 # Include routers
