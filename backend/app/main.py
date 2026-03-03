@@ -138,21 +138,26 @@ async def debug_inject():
             {"household_id": hh_id, "name": "Unipay", "amount": 317817, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
             {"household_id": hh_id, "name": "Cencosud 1", "amount": 120000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
             {"household_id": hh_id, "name": "Cencosud 2", "amount": 70000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Youtube", "amount": 11000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Ale", "amount": 26690, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Entel", "amount": 42330, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Wom", "amount": 36449, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Agustín", "amount": 300000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Google", "amount": 21700, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Joaquín", "amount": 109923, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Bencina", "amount": 100000, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Veritas", "amount": 29289, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Mercadolibre Carlos", "amount": 26411, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
-            {"household_id": hh_id, "name": "Mercadolibre Ana", "amount": 13330, "frequency": "monthly", "flow_category": "structural", "next_date": "2026-03-05"},
         ]
-        supabase.table("commitments").insert(commitments).execute()
+        supabase.table("commitments").upsert(commitments, on_conflict="household_id,name").execute()
         
-        return {"success": True, "message": "Real data injected into Demo Household"}
+        # Meal Plans (Mock for March)
+        meal_plans = [
+            {"household_id": hh_id, "date": "2026-03-03", "type": "lunch", "recipe_name": "Lentejas", "recipe_cost": 5000},
+            {"household_id": hh_id, "date": "2026-03-04", "type": "lunch", "recipe_name": "Pollo con Arroz", "recipe_cost": 8000},
+            {"household_id": hh_id, "date": "2026-03-05", "type": "lunch", "recipe_name": "Pasta Boloñesa", "recipe_cost": 6000}
+        ]
+        supabase.table("meal_plans").upsert(meal_plans, on_conflict="household_id,date,type").execute()
+        
+        # Shopping List (Mock for March)
+        shopping_list = [
+            {"household_id": hh_id, "name": "Pan molde", "estimated_cost": 3000, "month": "2026-03"},
+            {"household_id": hh_id, "name": "Leche 12pk", "estimated_cost": 12000, "month": "2026-03"},
+            {"household_id": hh_id, "name": "Frutas", "estimated_cost": 15000, "month": "2026-03"}
+        ]
+        supabase.table("shopping_list").insert(shopping_list).execute()
+        
+        return {"success": True, "message": "Injected commitments, meals and shopping list"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
