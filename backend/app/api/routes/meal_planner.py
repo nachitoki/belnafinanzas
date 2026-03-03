@@ -51,8 +51,14 @@ def save_meal_plan(
             data["household_id"] = household_id
             data["updated_at"] = datetime.utcnow().isoformat()
             
-            # Upsert by household_id + date + type
-            supabase.table("meal_plans").upsert(data, on_conflict="household_id,date,type").execute()
+            # Use delete + insert instead of upsert to avoid constraint name mismatch (42P10)
+            supabase.table("meal_plans").delete()\
+                .eq("household_id", household_id)\
+                .eq("date", data["date"])\
+                .eq("type", data["type"])\
+                .execute()
+                
+            supabase.table("meal_plans").insert(data).execute()
             
         return {"success": True, "count": len(meals)}
         

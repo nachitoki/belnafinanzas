@@ -141,23 +141,29 @@ async def debug_inject():
         ]
         supabase.table("commitments").upsert(commitments, on_conflict="household_id,name").execute()
         
-        # Meal Plans (Mock for March)
+        # Meal Plans (Mock for March) - Safe Delete then Insert
         meal_plans = [
             {"household_id": hh_id, "date": "2026-03-03", "type": "lunch", "recipe_name": "Lentejas", "recipe_cost": 5000},
             {"household_id": hh_id, "date": "2026-03-04", "type": "lunch", "recipe_name": "Pollo con Arroz", "recipe_cost": 8000},
             {"household_id": hh_id, "date": "2026-03-05", "type": "lunch", "recipe_name": "Pasta Boloñesa", "recipe_cost": 6000}
         ]
-        supabase.table("meal_plans").upsert(meal_plans, on_conflict="household_id,date,type").execute()
         
-        # Shopping List (Mock for March)
+        for m in meal_plans:
+            supabase.table("meal_plans").delete().eq("household_id", hh_id).eq("date", m["date"]).eq("type", m["type"]).execute()
+        supabase.table("meal_plans").insert(meal_plans).execute()
+        
+        # Shopping List (Mock for March) - Safe Delete then Insert
         shopping_list = [
             {"household_id": hh_id, "name": "Pan molde", "estimated_cost": 3000, "month": "2026-03"},
             {"household_id": hh_id, "name": "Leche 12pk", "estimated_cost": 12000, "month": "2026-03"},
             {"household_id": hh_id, "name": "Frutas", "estimated_cost": 15000, "month": "2026-03"}
         ]
+        
+        for s in shopping_list:
+            supabase.table("shopping_list").delete().eq("household_id", hh_id).eq("name", s["name"]).eq("month", s["month"]).execute()
         supabase.table("shopping_list").insert(shopping_list).execute()
         
-        return {"success": True, "message": "Injected commitments, meals and shopping list"}
+        return {"success": True, "message": "Injected commitments, meals and shopping list (safe mode)"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

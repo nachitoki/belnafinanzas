@@ -45,6 +45,39 @@ class DashboardService:
         # Una sola consulta relacional para todo (idealmente, pero por tiempo haremos consultas paralelas en Supabase que son 10x más rápidas)
         # B) Commitments
         commitments = self.supabase.table("commitments").select("*").eq("household_id", household_id).execute().data
+        
+        # --- Synthetic Commitments Logic (Meals + Shopping) ---
+        try:
+            start_of_month_str = target_date.replace(day=1).strftime("%Y-%m-%d")
+            month_key = target_date.strftime("%Y-%m")
+            
+            # Check for REAL shopping commitments
+            shopping_keywords = ["compra grande", "jumbo", "lider", "unimarc", "supermercado", "tottus", "santa isabel"]
+            has_real_shopping = any(any(k in (c.get("name") or "").lower() for k in shopping_keywords) for c in commitments)
+            
+            if not has_real_shopping:
+                # Meals Total
+                meal_resp = self.supabase.table("meal_plans").select("recipe_cost").eq("household_id", household_id).gte("date", start_of_month_str).execute()
+                meals_total = sum((m.get("recipe_cost") or 0) for m in meal_resp.data)
+                
+                # Shopping List Extras Total
+                shop_resp = self.supabase.table("shopping_list").select("estimated_cost").eq("household_id", household_id).eq("month", month_key).execute()
+                extras_total = sum((s.get("estimated_cost") or 0) for s in shop_resp.data)
+                
+                if meals_total > 0 or extras_total > 0:
+                    commitments.append({
+                        "id": "synthetic_shopping",
+                        "name": "Total Compra Grande (Estimado)",
+                        "amount": meals_total + extras_total,
+                        "frequency": "monthly",
+                        "flow_category": "structural",
+                        "next_date": start_of_month_str,
+                        "description": f"Almuerzos: ${meals_total:,} + Despensa: ${extras_total:,}"
+                    })
+        except Exception as e:
+            # Non-blocking error for synthetic logic
+            pass
+            
         # C) Events
         events = self.supabase.table("events").select("*").eq("household_id", household_id).execute().data
         # D) Incomes
