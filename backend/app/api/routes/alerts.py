@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from google.cloud.firestore import Client
-from app.core.firebase import get_firestore
+from supabase import Client
+from app.core.supabase import get_supabase
 from app.core.auth import get_current_user
 from datetime import datetime, timedelta, date
 from typing import Any
@@ -34,7 +34,7 @@ def _pct(amount: float, base: float) -> float:
 @router.get("/alerts")
 def get_alerts(
     user: dict = Depends(get_current_user),
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
     try:
         household_id = user["household_id"]
@@ -45,11 +45,10 @@ def get_alerts(
 
         alerts: list[dict[str, Any]] = []
 
-        # Budget base for thresholds
         budget_base = 0
         try:
             from app.services.dashboard_service import DashboardService
-            summary = DashboardService(db).get_dashboard_summary(household_id)
+            summary = DashboardService(supabase).get_dashboard_summary(household_id)
             mo = summary.get("month_overview", {})
             budget_base = mo.get("income_total", 0) or 0
         except Exception:
@@ -61,10 +60,8 @@ def get_alerts(
         threshold_amount = budget_base * 0.03
 
         # Load commitments
-        commitments_docs = db.collection("households").document(household_id)\
-            .collection("commitments").limit(200).stream()
-        for doc in commitments_docs:
-            data = doc.to_dict()
+        comm_resp = supabase.table("commitments").select("*").eq("household_id", household_id).execute()
+        for data in comm_resp.data:
             next_date = _parse_date(data.get("next_date"))
             amount = float(data.get("amount", 0) or 0)
             if next_date and now <= next_date <= horizon_7:
@@ -80,10 +77,8 @@ def get_alerts(
                 })
 
         # Load events
-        events_docs = db.collection("households").document(household_id)\
-            .collection("events").limit(200).stream()
-        for doc in events_docs:
-            data = doc.to_dict()
+        evt_resp = supabase.table("events").select("*").eq("household_id", household_id).execute()
+        for data in evt_resp.data:
             event_date = _parse_date(data.get("date"))
             amount = float(data.get("amount_estimate", 0) or 0)
             mandatory = bool(data.get("is_mandatory", False))
@@ -99,10 +94,10 @@ def get_alerts(
                     "impact_pct": _pct(amount, budget_base)
                 })
 
-        # Simple budget alert from dashboard month overview
+        # Budget alert
         try:
             from app.services.dashboard_service import DashboardService
-            summary = DashboardService(db).get_dashboard_summary(household_id)
+            summary = DashboardService(supabase).get_dashboard_summary(household_id)
             mo = summary.get("month_overview", {})
             projected = mo.get("projected_balance", 0) or 0
             optional_budget = mo.get("optional_budget", 0) or 0
@@ -126,7 +121,6 @@ def get_alerts(
         except Exception:
             pass
 
-        # Sort by severity
         severity_rank = {"high": 0, "medium": 1, "low": 2}
         alerts.sort(key=lambda a: severity_rank.get(a.get("severity", "low"), 2))
 

@@ -1,8 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.core.firebase import get_firestore
-from app.services.product_service import ProductService
-from google.cloud.firestore import Client
+from supabase import Client
+from app.core.supabase import get_supabase
 
 router = APIRouter()
 
@@ -10,14 +9,15 @@ router = APIRouter()
 def get_strategic_products(
     category: Optional[str] = Query(None, description="Filter by category (esenciales, despensa, limpieza)"),
     household_id: str = "3YrfW0araoI8So0SNepX",
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
-    """
-    Get list of strategic products with their calculated status
-    """
+    """Get list of strategic products with their calculated status"""
     try:
-        service = ProductService(db)
-        return service.get_strategic_products(household_id, category)
+        query = supabase.table("products").select("*").eq("household_id", household_id)
+        if category:
+            query = query.eq("category_tag", category)
+        resp = query.limit(200).execute()
+        return resp.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -25,13 +25,15 @@ def get_strategic_products(
 def get_product_insight(
     product_id: str,
     household_id: str = "3YrfW0araoI8So0SNepX",
-    db: Client = Depends(get_firestore)
+    supabase: Client = Depends(get_supabase)
 ):
-    """
-    Get detailed price insight for a product
-    """
+    """Get detailed price insight for a product"""
     try:
-        service = ProductService(db)
-        return service.get_product_insight(household_id, product_id)
+        product = supabase.table("products").select("*").eq("id", product_id).execute()
+        prices = supabase.table("product_prices").select("*").eq("product_id", product_id).order("date", desc=True).limit(20).execute()
+        return {
+            "product": product.data[0] if product.data else None,
+            "prices": prices.data
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
