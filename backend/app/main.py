@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.firebase import initialize_firebase
 from app.core.config import settings
 from app.api.routes import receipts, jobs, telegram, dashboard, products, catalog, incomes, commitments, events, alerts, horizon, recipes, shopping_list, bitacora, diagnose, meal_planner, advisor
 import logging
+import traceback
 
 # Configure logging
 logging.basicConfig(
@@ -20,7 +22,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware (MVP: allow all origins to avoid deployment blockers)
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,6 +30,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Global exception handler - ensures CORS headers on ALL error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 
 @app.on_event("startup")
