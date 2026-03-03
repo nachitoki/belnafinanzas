@@ -88,6 +88,7 @@ async def debug_db():
             "commitments_total": supabase.table("commitments").select("id", count="exact").execute().count,
             "transactions_total": supabase.table("transactions").select("id", count="exact").execute().count,
             "events_total": supabase.table("events").select("id", count="exact").execute().count,
+            "meal_plans_total": supabase.table("meal_plans").select("id", count="exact").execute().count,
             "users_total": supabase.table("users").select("id", count="exact").execute().count
         }
         
