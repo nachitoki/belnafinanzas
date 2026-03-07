@@ -36,8 +36,8 @@ def _parse_ingredients(value: str) -> list[str]:
     result = []
     for p in parts:
         p = p.replace("@", "").strip()
-        if " (" in p:
-            p = p.split(" (")[0].strip()
+        # if " (" in p:
+        #     p = p.split(" (")[0].strip()
         result.append(p)
     return result
 
@@ -58,9 +58,21 @@ def _get_cached_recipes():
                 if not name:
                     continue
                 meal_type = (row.get("Tipo de comida") or "").strip()
-                ingredients = _parse_ingredients(row.get("Ingredientes (intermedio)") or row.get("Ingredientes") or "")
-                cost_value = _parse_cost(row.get("Valor receta") or row.get("Costo receta") or row.get("Costo Estimado") or "")
+                ingredients_raw = (
+                    row.get("Ingredientes (intermedio)") or 
+                    row.get("Ingredientes") or 
+                    row.get("Ingredients") or 
+                    row.get("Ingredientes (relación)") or
+                    ""
+                )
+                ingredients = _parse_ingredients(ingredients_raw)
+                cost_value = _parse_cost(row.get("Valor receta") or row.get("Costo receta") or row.get("Costo Estimado") or row.get("Precio") or "")
+                
+                # Use a stable hash or name as ID if missing
+                recipe_id = row.get("ID") or str(abs(hash(name))) if name else None
+                
                 items.append({
+                    "id": recipe_id,
                     "name": name,
                     "meal_type": meal_type,
                     "ingredients": ingredients,

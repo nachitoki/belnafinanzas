@@ -100,7 +100,7 @@ const ShoppingList = ({ mode = 'list' }) => {
     useEffect(() => {
         const loadRecipes = async () => {
             try {
-                const data = await getRecipes();
+                const data = await getRecipes(1000);
                 const overridesRaw = window.localStorage.getItem('recipes_override');
                 const overrides = overridesRaw ? JSON.parse(overridesRaw) : {};
                 const merged = (data || []).map((r) => {
@@ -124,9 +124,14 @@ const ShoppingList = ({ mode = 'list' }) => {
                 const now = new Date();
                 const year = now.getFullYear();
                 const month = now.getMonth();
-                const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-                const lastDay = new Date(year, month + 1, 0).getDate();
-                const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                
+                // Fetch a wider range to catch planned meals that might be in a different year/month perspective
+                const start = new Date(year, month - 3, 1);
+                const end = new Date(year, month + 3, 0);
+                
+                const startDate = start.toISOString().slice(0, 10);
+                const endDate = end.toISOString().slice(0, 10);
+                
                 const data = await getMeals(startDate, endDate);
                 if (Array.isArray(data)) {
                     const map = {};
@@ -595,23 +600,28 @@ const ShoppingList = ({ mode = 'list' }) => {
                 const cleaned = parsed.name;
                 const normalized = normalizeText(cleaned);
                 if (!normalized) return;
-                if (!parsed.qty || !parsed.unit) return;
-                const current = map.get(normalized) || { name: cleaned, qty: 0, unit: parsed.unit || null, count: 0, mixedUnit: false };
+                
+                // Be more permissive: if no qty, assume 1. If no unit, it's fine.
+                const effectiveQty = (parsed.qty !== null && !isNaN(parsed.qty)) ? parsed.qty : 1;
+                const effectiveUnit = parsed.unit || 'unidad';
+
+                const current = map.get(normalized) || { name: cleaned, qty: 0, unit: effectiveUnit, count: 0, mixedUnit: false };
                 current.count += occurrences;
-                if (parsed.qty && parsed.unit && (current.unit === parsed.unit || !current.unit)) {
-                    current.unit = parsed.unit;
-                    current.qty += parsed.qty * occurrences;
-                } else if (parsed.qty && parsed.unit && current.unit && current.unit !== parsed.unit) {
+                
+                if (effectiveQty && (current.unit === effectiveUnit || !current.unit)) {
+                    current.unit = effectiveUnit;
+                    current.qty += effectiveQty * occurrences;
+                } else if (effectiveQty && current.unit && current.unit !== effectiveUnit) {
                     const preferWeight = ['g', 'kg', 'ml', 'lt'];
-                    if (current.unit === 'unidad' && preferWeight.includes(parsed.unit)) {
-                        current.unit = parsed.unit;
-                        current.qty = parsed.qty * occurrences;
+                    if (current.unit === 'unidad' && preferWeight.includes(effectiveUnit)) {
+                        current.unit = effectiveUnit;
+                        current.qty = effectiveQty * occurrences;
                         current.mixedUnit = false;
-                    } else if (!preferWeight.includes(current.unit) && preferWeight.includes(parsed.unit)) {
-                        current.unit = parsed.unit;
-                        current.qty = parsed.qty * occurrences;
+                    } else if (!preferWeight.includes(current.unit) && preferWeight.includes(effectiveUnit)) {
+                        current.unit = effectiveUnit;
+                        current.qty = effectiveQty * occurrences;
                         current.mixedUnit = false;
-                    } else if (preferWeight.includes(current.unit) && parsed.unit === 'unidad') {
+                    } else if (preferWeight.includes(current.unit) && effectiveUnit === 'unidad') {
                         // keep weight-based unit
                     } else {
                         current.mixedUnit = true;
@@ -710,12 +720,14 @@ const ShoppingList = ({ mode = 'list' }) => {
             .filter(Boolean);
         if (toAdd.length === 0 && toUpdate.length === 0) return;
         setSyncingPlanned(true);
+        const currentMonthStr = new Date().toISOString().slice(0, 7);
         const createPromises = toAdd.map((entry) => createShoppingItem({
             name: entry.name,
             qty: entry.qty || null,
             unit: entry.unit || null,
             bucket: 'monthly',
-            weeks: []
+            weeks: [],
+            month: currentMonthStr
         }));
         const updatePromises = toUpdate.map(({ item, planned, plannedUnit, plannedQty }) =>
             updateShoppingItem(item.id, {
