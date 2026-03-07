@@ -51,29 +51,30 @@ class DashboardService:
             start_of_month_str = target_date.replace(day=1).strftime("%Y-%m-%d")
             month_key = target_date.strftime("%Y-%m")
             
-            # Check for REAL shopping commitments
-            shopping_keywords = ["compra grande", "jumbo", "lider", "unimarc", "supermercado", "tottus", "santa isabel"]
-            has_real_shopping = any(any(k in (c.get("name") or "").lower() for k in shopping_keywords) for c in commitments)
+            if target_date.month == 12:
+                next_month_start = target_date.replace(year=target_date.year + 1, month=1, day=1).strftime("%Y-%m-%d")
+            else:
+                next_month_start = target_date.replace(month=target_date.month + 1, day=1).strftime("%Y-%m-%d")
             
-            if not has_real_shopping:
-                # Meals Total
-                meal_resp = self.supabase.table("meal_plans").select("recipe_cost").eq("household_id", household_id).gte("date", start_of_month_str).execute()
-                meals_total = sum((m.get("recipe_cost") or 0) for m in meal_resp.data)
-                
-                # Shopping List Extras Total
-                shop_resp = self.supabase.table("shopping_list").select("estimated_cost").eq("household_id", household_id).eq("month", month_key).execute()
-                extras_total = sum((s.get("estimated_cost") or 0) for s in shop_resp.data)
-                
-                if meals_total > 0 or extras_total > 0:
-                    commitments.append({
-                        "id": "synthetic_shopping",
-                        "name": "Total Compra Grande (Estimado)",
-                        "amount": meals_total + extras_total,
-                        "frequency": "monthly",
-                        "flow_category": "structural",
-                        "next_date": start_of_month_str,
-                        "description": f"Almuerzos: ${meals_total:,} + Despensa: ${extras_total:,}"
-                    })
+            # Meals Total (Planificados en el mes M)
+            meal_resp = self.supabase.table("meal_plans").select("recipe_cost").eq("household_id", household_id).gte("date", start_of_month_str).execute()
+            meals_total = sum((m.get("recipe_cost") or 0) for m in meal_resp.data)
+            
+            # Shopping List Extras Total (Extras en el mes M)
+            shop_resp = self.supabase.table("shopping_list").select("estimated_cost").eq("household_id", household_id).eq("month", month_key).execute()
+            extras_total = sum((s.get("estimated_cost") or 0) for s in shop_resp.data)
+            
+            # La suma se proyecta al mes M+1 porque se paga con tarjeta Diferida (ADR 001)
+            if meals_total > 0 or extras_total > 0:
+                commitments.append({
+                    "id": "synthetic_shopping",
+                    "name": "Total Compra Grande (Estimado Prox Mes)",
+                    "amount": meals_total + extras_total,
+                    "frequency": "monthly",
+                    "flow_category": "structural",
+                    "next_date": next_month_start, # Deuda proyectada
+                    "description": f"Basado en consumos de {month_key}. Almuerzos: ${meals_total:,} + Despensa: ${extras_total:,}"
+                })
         except Exception as e:
             # Non-blocking error for synthetic logic
             pass
@@ -303,34 +304,25 @@ class DashboardService:
         
         # Calculate food spending (current month)
         food_spent = 0.0
-        # Identify "Food" categories - simplified matching
-        # In a robust system, we'd use a flag in the category document, but name matching works for MVP
-        food_keywords = ["supermercado", "comida", "alimento", "restaurante", "jumbo", "lider", "unimarc", "santa isabel"]
+        food_keywords = ["supermercado", "comida", "alimento", "restaurante", "jumbo", "lider", "unimarc", "santa isabel", "tottus", "acunta", "provision", "carniceria", "feria", "verdura"]
         
-        for tx in transactions_objects:
-            # We filter transactions from step 1 (last 30 days) but we specifically want CURRENT MONTH for budget
-            if tx.date >= month_start:
-                 # Check category name from map
-                 cat_name = (cat_map.get(tx.category, {}).get('name') or "").lower()
-                 if any(k in cat_name for k in food_keywords):
-                     food_spent += tx.amount
-
-        # Also check raw transactions that might not be in transactions_objects if window differs, 
-        # but transactions_objects is last 30 days. 
-        # Actually, query_start was set to month_start - 1 so we have cover.
-        # Wait, trans_docs (all_transactions_data) covers query_start (start of month).
-        # transactions_objects covers last 30 days.
-        # We should iterate over `all_transactions_data` for accuracy if current day > 30th.
-        
-        food_spent = 0.0
         for data in all_transactions_data:
              parsed_date = data.get('parsed_date')
              if parsed_date and parsed_date >= month_start:
                  amount = float(data.get('amount', 0))
                  if amount < 0: # Expense
                      cat_id = data.get('category_id')
-                     cat_name = (cat_map.get(cat_id, {}).get('name') or "").lower()
-                     if any(k in cat_name for k in food_keywords):
+                     cat_item = cat_map.get(cat_id, {})
+                     cat_name = (cat_item.get('name') or "").lower()
+                     description = (data.get('description') or "").lower()
+                     store_name = (data.get('store_name') or "").lower()
+                     
+                     is_food = any(k in cat_name for k in food_keywords) or \
+                               any(k in description for k in food_keywords) or \
+                               any(k in store_name for k in food_keywords) or \
+                               cat_item.get('essential', False) and ("comida" in cat_name or "super" in cat_name)
+                               
+                     if is_food:
                          food_spent += abs(amount)
 
         

@@ -59,9 +59,10 @@ const MealCalendar = () => {
 
             if (viewMode === 'week') {
                 // Start of week (Monday) from currentDate
-                const day = currentDate.getDay();
-                const diff = currentDate.getDate() - day + (day === 0 ? -6 : 1);
-                const monday = new Date(currentDate.setDate(diff));
+                const d = new Date(currentDate);
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(d.setDate(diff));
                 const sunday = new Date(monday);
                 sunday.setDate(monday.getDate() + 6);
 

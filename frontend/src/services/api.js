@@ -344,7 +344,7 @@ export const generateBitacoraPatterns = async () => {
 
 export const getExpensePatterns = async () => {
     try {
-        const response = await axios.get(`${API_URL}/patterns`, {
+        const response = await axios.get(`${API_URL}/receipts/patterns`, {
             timeout: REQUEST_TIMEOUT_MS
         });
         return response.data;

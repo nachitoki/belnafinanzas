@@ -1,4 +1,4 @@
-﻿
+
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     getShoppingList,
@@ -7,7 +7,8 @@ import {
     updateShoppingItem,
     deleteShoppingItem,
     getProductPrices,
-    getRecipes
+    getRecipes,
+    getMeals
 } from '../../services/api';
 
 const ShoppingList = ({ mode = 'list' }) => {
@@ -32,27 +33,48 @@ const ShoppingList = ({ mode = 'list' }) => {
     const [listView, setListView] = useState('list');
     const [showChecked, setShowChecked] = useState(false);
     const isAhorro = mode === 'ahorro';
+    const [mealsCalendar, setMealsCalendar] = useState({});
 
     const loadAll = async () => {
         setLoading(true);
         try {
-            const [listData, suggestionData] = await Promise.all([
-                getShoppingList(),
-                getShoppingSuggestions()
-            ]);
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            const listData = await getShoppingList(currentMonth);
             setItems(listData || []);
-            setSuggestions(suggestionData || []);
-            setQuerySuggestions([]);
+            
+            // Only update main cache if shopping list fetch succeeds
+            const cachedRaw = window.localStorage.getItem('shopping_list_cache_v1');
+            let cached = { items: [], suggestions: [] };
+            try { if (cachedRaw) cached = JSON.parse(cachedRaw); } catch (e) {}
+            
             window.localStorage.setItem('shopping_list_cache_v1', JSON.stringify({
                 ts: Date.now(),
                 items: listData || [],
-                suggestions: suggestionData || []
+                suggestions: cached.suggestions || []
             }));
         } catch (e) {
             console.error('Error loading shopping list', e);
-            setItems([]);
+            // DO NOT clear items! Let it keep previous cache.
+        }
+        
+        // Fetch suggestions separately
+        try {
+            const suggestionData = await getShoppingSuggestions();
+            setSuggestions(suggestionData || []);
+            
+            // Update suggestions cache
+            const cachedRaw = window.localStorage.getItem('shopping_list_cache_v1');
+            let cached = { items: [] };
+            try { if (cachedRaw) cached = JSON.parse(cachedRaw); } catch (e) {}
+            
+            window.localStorage.setItem('shopping_list_cache_v1', JSON.stringify({
+                ts: Date.now(),
+                items: cached.items || [],
+                suggestions: suggestionData || []
+            }));
+        } catch (e) {
+            console.warn('Error loading shopping suggestions', e);
             setSuggestions([]);
-            setQuerySuggestions([]);
         } finally {
             setLoading(false);
         }
@@ -93,6 +115,33 @@ const ShoppingList = ({ mode = 'list' }) => {
             }
         };
         loadRecipes();
+    }, []);
+
+    // Load meals from Supabase API (not localStorage) for planned ingredients
+    useEffect(() => {
+        const loadMeals = async () => {
+            try {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth();
+                const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+                const lastDay = new Date(year, month + 1, 0).getDate();
+                const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                const data = await getMeals(startDate, endDate);
+                if (Array.isArray(data)) {
+                    const map = {};
+                    data.forEach(m => {
+                        if (m.recipe_name) {
+                            map[`${m.date}_${m.type}`] = m.recipe_name;
+                        }
+                    });
+                    setMealsCalendar(map);
+                }
+            } catch (e) {
+                console.warn('Error loading meals for planned ingredients', e);
+            }
+        };
+        loadMeals();
     }, []);
 
     useEffect(() => {
@@ -500,30 +549,10 @@ const ShoppingList = ({ mode = 'list' }) => {
 
     const plannedIngredients = (() => {
         if (!recipes.length) return [];
-        const now = new Date();
-        const key = `meal_calendar_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        let calendar = {};
-        try {
-            const raw = window.localStorage.getItem(key);
-            calendar = raw ? JSON.parse(raw) : {};
-        } catch (e) {
-            calendar = {};
-        }
-        if (!calendar || Object.keys(calendar).length === 0) {
-            try {
-                const keys = Object.keys(window.localStorage).filter((k) => k.startsWith('meal_calendar_'));
-                const latest = keys
-                    .map((k) => ({ k, ym: k.replace('meal_calendar_', '') }))
-                    .sort((a, b) => (a.ym > b.ym ? -1 : 1))[0];
-                if (latest?.k) {
-                    const raw = window.localStorage.getItem(latest.k);
-                    calendar = raw ? JSON.parse(raw) : {};
-                }
-            } catch (e) {
-                // ignore
-            }
-        }
-        const plannedValues = Object.values(calendar || {}).filter(Boolean);
+        // Use mealsCalendar from API (Supabase) instead of localStorage
+        const calendar = mealsCalendar || {};
+        if (!calendar || Object.keys(calendar).length === 0) return [];
+        const plannedValues = Object.values(calendar).filter(Boolean);
         const plannedRecipeNames = new Set(plannedValues);
         const plannedRecipeNamesNormalized = new Set(plannedValues.map((value) => normalizeKey(value)));
         if (!plannedRecipeNames.size && !plannedRecipeNamesNormalized.size) return [];
@@ -717,238 +746,238 @@ const ShoppingList = ({ mode = 'list' }) => {
     const renderList = (title, list) => {
         const mergedList = mergeItems(list);
         return (
-        <div className="spending-card" style={{ marginTop: title === 'Semanal' ? '12px' : undefined }}>
-            <div className="section-title">{title}</div>
-            {loading && items.length === 0 ? (
-                <div style={{ textAlign: 'center' }}>Cargando lista...</div>
-            ) : mergedList.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#aaa' }}>Sin items por ahora.</div>
-            ) : (
-                mergedList.map((item) => (
-                    <div key={item.id} style={{ borderBottom: '1px dashed var(--border-light)', padding: '8px 0' }}>
-                        {editingId === item.id ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <input
-                                    value={editForm.name || ''}
-                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
-                                />
-                                <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="spending-card" style={{ marginTop: title === 'Semanal' ? '12px' : undefined }}>
+                <div className="section-title">{title}</div>
+                {loading && items.length === 0 ? (
+                    <div style={{ textAlign: 'center' }}>Cargando lista...</div>
+                ) : mergedList.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#aaa' }}>Sin items por ahora.</div>
+                ) : (
+                    mergedList.map((item) => (
+                        <div key={item.id} style={{ borderBottom: '1px dashed var(--border-light)', padding: '8px 0' }}>
+                            {editingId === item.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <input
-                                        value={editForm.qty || ''}
-                                        onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })}
-                                        inputMode="decimal"
-                                        placeholder="Cantidad"
-                                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                        value={editForm.name || ''}
+                                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                        style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
                                     />
-                                    <input
-                                        value={editForm.unit || ''}
-                                        onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
-                                        placeholder="Unidad"
-                                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
-                                    />
-                                </div>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={(editForm.bucket || 'monthly') === 'weekly'}
-                                        onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            setEditForm({
-                                                ...editForm,
-                                                bucket: checked ? 'weekly' : 'monthly',
-                                                weeks: checked ? (editForm.weeks || []) : []
-                                            });
-                                        }}
-                                    />
-                                    Semanal
-                                </label>
-                                {editForm.bucket === 'weekly' && (
-                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                        {weekOptions.map((w) => (
-                                            <label key={w} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={(editForm.weeks || []).includes(w)}
-                                                    onChange={() => toggleEditWeek(w)}
-                                                />
-                                                Semana {w}
-                                            </label>
-                                        ))}
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input
+                                            value={editForm.qty || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })}
+                                            inputMode="decimal"
+                                            placeholder="Cantidad"
+                                            style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                        />
+                                        <input
+                                            value={editForm.unit || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                                            placeholder="Unidad"
+                                            style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+                                        />
                                     </div>
-                                )}
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button
-                                        onClick={handleUpdate}
-                                        disabled={saving}
-                                        style={{ flex: 1, padding: '8px', background: 'var(--status-green-main)', color: 'white', border: 'none', borderRadius: '6px' }}
-                                    >
-                                        Guardar
-                                    </button>
-                                    <button
-                                        onClick={() => { setEditingId(null); setEditForm({}); }}
-                                        disabled={saving}
-                                        style={{ flex: 1, padding: '8px', background: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px' }}
-                                    >
-                                        Cancelar
-                                    </button>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--color-text-dim)' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={(editForm.bucket || 'monthly') === 'weekly'}
+                                            onChange={(e) => {
+                                                const checked = e.target.checked;
+                                                setEditForm({
+                                                    ...editForm,
+                                                    bucket: checked ? 'weekly' : 'monthly',
+                                                    weeks: checked ? (editForm.weeks || []) : []
+                                                });
+                                            }}
+                                        />
+                                        Semanal
+                                    </label>
+                                    {editForm.bucket === 'weekly' && (
+                                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                            {weekOptions.map((w) => (
+                                                <label key={w} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(editForm.weeks || []).includes(w)}
+                                                        onChange={() => toggleEditWeek(w)}
+                                                    />
+                                                    Semana {w}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                            onClick={handleUpdate}
+                                            disabled={saving}
+                                            style={{ flex: 1, padding: '8px', background: 'var(--status-green-main)', color: 'white', border: 'none', borderRadius: '6px' }}
+                                        >
+                                            Guardar
+                                        </button>
+                                        <button
+                                            onClick={() => { setEditingId(null); setEditForm({}); }}
+                                            disabled={saving}
+                                            style={{ flex: 1, padding: '8px', background: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px' }}
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!item.checked}
-                                        onChange={() => {
-                                            const group = item._groupItems || [item];
-                                            const nextChecked = !item.checked;
-                                            Promise.all(group.map((g) => updateShoppingItem(g.id, { checked: nextChecked })))
-                                                .then(() => {
-                                                    const ids = new Set(group.map((g) => g.id));
-                                                    setItems((prev) => prev.map((i) => ids.has(i.id) ? { ...i, checked: nextChecked } : i));
-                                                })
-                                                .catch((e) => console.error('Error updating items', e));
-                                        }}
-                                    />
-                                    <div>
-                                        <div style={{ fontWeight: '700', textDecoration: item.checked ? 'line-through' : 'none' }}>
-                                            {item.name || item.product_name || 'Sin nombre'}
-                                            {item._groupCount > 1 && (
-                                                <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                                    x{item._groupCount}
-                                                </span>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!item.checked}
+                                            onChange={() => {
+                                                const group = item._groupItems || [item];
+                                                const nextChecked = !item.checked;
+                                                Promise.all(group.map((g) => updateShoppingItem(g.id, { checked: nextChecked })))
+                                                    .then(() => {
+                                                        const ids = new Set(group.map((g) => g.id));
+                                                        setItems((prev) => prev.map((i) => ids.has(i.id) ? { ...i, checked: nextChecked } : i));
+                                                    })
+                                                    .catch((e) => console.error('Error updating items', e));
+                                            }}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: '700', textDecoration: item.checked ? 'line-through' : 'none' }}>
+                                                {item.name || item.product_name || 'Sin nombre'}
+                                                {item._groupCount > 1 && (
+                                                    <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                                        x{item._groupCount}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {autoPlannedSet.has(normalizeText(item.name || item.product_name || '')) && (
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                                    ♻ Platos
+                                                </div>
+                                            )}
+                                            {(() => {
+                                                const plannedEntry = getPlannedEntryForName(item.name || item.product_name || '');
+                                                if (!plannedEntry) return null;
+                                                if (plannedEntry.qty && plannedEntry.unit) return null;
+                                                return (
+                                                    <div style={{ fontSize: '0.75rem', color: '#c53030' }}>
+                                                        ⚠ Falta cantidad en receta
+                                                    </div>
+                                                );
+                                            })()}
+                                            {(item.qty || item.unit) && !getPlannedEntryForName(item.name || item.product_name || '') && (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                                    {item.qty ? item.qty : ''} {item.unit || ''}
+                                                </div>
+                                            )}
+                                            {(() => {
+                                                const entry = getPlannedEntryForName(item.name || item.product_name || '');
+                                                if (!entry) return null;
+                                                return (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                                        Requerido: {(() => {
+                                                            if (entry.unit === 'kg' || entry.unit === 'g') {
+                                                                const grams = entry.unit === 'kg' ? (entry.qty || 0) * 1000 : (entry.qty || 0);
+                                                                return `${Math.round(grams || 0)} g`;
+                                                            }
+                                                            if (entry.unit === 'lt' || entry.unit === 'ml') {
+                                                                const ml = entry.unit === 'lt' ? (entry.qty || 0) * 1000 : (entry.qty || 0);
+                                                                return `${Math.round(ml || 0)} ml`;
+                                                            }
+                                                            if (entry.qty && entry.unit === 'unidad') return `${entry.qty} unidades`;
+                                                            if (entry.qty) return `${entry.qty} ${entry.unit || ''}`;
+                                                            return entry.count > 1 ? `${entry.count} items` : '1 item';
+                                                        })()}
+                                                    </div>
+                                                );
+                                            })()}
+                                            {(() => {
+                                                const key = normalizeText(item.name || item.product_name || '');
+                                                const planned = getPlannedEntryForName(item.name || item.product_name || '');
+                                                const qtyValue = planned?.qty || item.qty;
+                                                const unitValue = planned?.unit || item.unit;
+                                                const suggestion = getWeightRoundingSuggestion(Number(qtyValue), unitValue);
+                                                if (!suggestion) return null;
+                                                return (
+                                                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>
+                                                        Sugerencia: comprar {suggestion}
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {Array.isArray(item.weeks) && item.weeks.length > 0 && (
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
+                                                    Semanas: {item.weeks.join(', ')}
+                                                </div>
+                                            )}
+                                            {item.best_price?.unit_price && !isLegacyPrice(item.best_price) && (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                                    Mejor: ${fmt(item.best_price.unit_price)} {item.best_price.unit ? `/${item.best_price.unit}` : ''} {item.best_price.store_name ? `- ${item.best_price.store_name}` : ''}
+                                                </div>
+                                            )}
+                                            {item.best_price?.unit_price && isLegacyPrice(item.best_price) && (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                                    Mejor (legacy): ${fmt(item.best_price.unit_price)} {item.best_price.unit ? `/${item.best_price.unit}` : ''} {item.best_price.store_name ? `- ${item.best_price.store_name}` : ''}
+                                                </div>
+                                            )}
+                                            {getEstimate(item) !== null && (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
+                                                    Total estimado: ${fmt(getEstimate(item))}
+                                                </div>
                                             )}
                                         </div>
-                                        {autoPlannedSet.has(normalizeText(item.name || item.product_name || '')) && (
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                                ♻ Platos
-                                            </div>
-                                        )}
-                                        {(() => {
-                                            const plannedEntry = getPlannedEntryForName(item.name || item.product_name || '');
-                                            if (!plannedEntry) return null;
-                                            if (plannedEntry.qty && plannedEntry.unit) return null;
-                                            return (
-                                                <div style={{ fontSize: '0.75rem', color: '#c53030' }}>
-                                                    ⚠ Falta cantidad en receta
-                                                </div>
-                                            );
-                                        })()}
-                                        {(item.qty || item.unit) && !getPlannedEntryForName(item.name || item.product_name || '') && (
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                                {item.qty ? item.qty : ''} {item.unit || ''}
-                                            </div>
-                                        )}
-                                        {(() => {
-                                            const entry = getPlannedEntryForName(item.name || item.product_name || '');
-                                            if (!entry) return null;
-                                            return (
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                                    Requerido: {(() => {
-                                                        if (entry.unit === 'kg' || entry.unit === 'g') {
-                                                            const grams = entry.unit === 'kg' ? (entry.qty || 0) * 1000 : (entry.qty || 0);
-                                                            return `${Math.round(grams || 0)} g`;
-                                                        }
-                                                        if (entry.unit === 'lt' || entry.unit === 'ml') {
-                                                            const ml = entry.unit === 'lt' ? (entry.qty || 0) * 1000 : (entry.qty || 0);
-                                                            return `${Math.round(ml || 0)} ml`;
-                                                        }
-                                                        if (entry.qty && entry.unit === 'unidad') return `${entry.qty} unidades`;
-                                                        if (entry.qty) return `${entry.qty} ${entry.unit || ''}`;
-                                                        return entry.count > 1 ? `${entry.count} items` : '1 item';
-                                                    })()}
-                                                </div>
-                                            );
-                                        })()}
-                                        {(() => {
-                                            const key = normalizeText(item.name || item.product_name || '');
-                                            const planned = getPlannedEntryForName(item.name || item.product_name || '');
-                                            const qtyValue = planned?.qty || item.qty;
-                                            const unitValue = planned?.unit || item.unit;
-                                            const suggestion = getWeightRoundingSuggestion(Number(qtyValue), unitValue);
-                                            if (!suggestion) return null;
-                                            return (
-                                                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-dim)' }}>
-                                                    Sugerencia: comprar {suggestion}
-                                                </div>
-                                            );
-                                        })()}
-                                        
-                                        {Array.isArray(item.weeks) && item.weeks.length > 0 && (
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
-                                                Semanas: {item.weeks.join(', ')}
-                                            </div>
-                                        )}
-                                        {item.best_price?.unit_price && !isLegacyPrice(item.best_price) && (
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                                Mejor: ${fmt(item.best_price.unit_price)} {item.best_price.unit ? `/${item.best_price.unit}` : ''} {item.best_price.store_name ? `- ${item.best_price.store_name}` : ''}
-                                            </div>
-                                        )}
-                                        {item.best_price?.unit_price && isLegacyPrice(item.best_price) && (
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                                Mejor (legacy): ${fmt(item.best_price.unit_price)} {item.best_price.unit ? `/${item.best_price.unit}` : ''} {item.best_price.store_name ? `- ${item.best_price.store_name}` : ''}
-                                            </div>
-                                        )}
-                                        {getEstimate(item) !== null && (
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-dim)' }}>
-                                                Total estimado: ${fmt(getEstimate(item))}
-                                            </div>
-                                        )}
                                     </div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                    {item.product_id && (
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        {item.product_id && (
+                                            <button
+                                                onClick={() => togglePrices(item)}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                                            >
+                                                $
+                                            </button>
+                                        )}
                                         <button
-                                            onClick={() => togglePrices(item)}
+                                            onClick={() => startEdit(item)}
                                             style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                                         >
-                                            $
+                                            {'\u270F\uFE0F'}
                                         </button>
-                                    )}
-                                    <button
-                                        onClick={() => startEdit(item)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                                    >
-                                        {'\u270F\uFE0F'}
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const group = item._groupItems || [item];
-                                            if (!window.confirm('Eliminar este item?')) return;
-                                            Promise.all(group.map((g) => deleteShoppingItem(g.id)))
-                                                .then(() => {
-                                                    const ids = new Set(group.map((g) => g.id));
-                                                    setItems((prev) => prev.filter((i) => !ids.has(i.id)));
-                                                })
-                                                .catch((e) => console.error('Error deleting items', e));
-                                        }}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                                    >
-                                        {'\uD83D\uDDD1\uFE0F'}
-                                    </button>
+                                        <button
+                                            onClick={() => {
+                                                const group = item._groupItems || [item];
+                                                if (!window.confirm('Eliminar este item?')) return;
+                                                Promise.all(group.map((g) => deleteShoppingItem(g.id)))
+                                                    .then(() => {
+                                                        const ids = new Set(group.map((g) => g.id));
+                                                        setItems((prev) => prev.filter((i) => !ids.has(i.id)));
+                                                    })
+                                                    .catch((e) => console.error('Error deleting items', e));
+                                            }}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                                        >
+                                            {'\uD83D\uDDD1\uFE0F'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        {Array.isArray(pricesByItem[item.id]) && (
-                            <div style={{ marginTop: '8px', paddingLeft: '22px' }}>
-                                {pricesByItem[item.id].length === 0 ? (
-                                    <div style={{ fontSize: '0.8rem', color: '#aaa' }}>Sin precios disponibles.</div>
-                                ) : (
-                                    pricesByItem[item.id].map((p, idx) => (
-                                        <div key={`${item.id}-p-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>
-                                            <span>{p.store_name || 'Tienda'}</span>
-                                            <span>${fmt(p.unit_price)} {p.unit ? `/${p.unit}` : ''}</span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        )}
-                    </div>
-                ))
-            )}
-        </div>
-    );
+                            )}
+                            {Array.isArray(pricesByItem[item.id]) && (
+                                <div style={{ marginTop: '8px', paddingLeft: '22px' }}>
+                                    {pricesByItem[item.id].length === 0 ? (
+                                        <div style={{ fontSize: '0.8rem', color: '#aaa' }}>Sin precios disponibles.</div>
+                                    ) : (
+                                        pricesByItem[item.id].map((p, idx) => (
+                                            <div key={`${item.id}-p-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-dim)', marginBottom: '4px' }}>
+                                                <span>{p.store_name || 'Tienda'}</span>
+                                                <span>${fmt(p.unit_price)} {p.unit ? `/${p.unit}` : ''}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
+        );
     };
 
     return (

@@ -39,7 +39,8 @@ const Inventory = () => {
         const load = async () => {
             setLoading(true);
             try {
-                const [recipesData, listData] = await Promise.all([getRecipes(), getShoppingList()]);
+                const currentMonth = new Date().toISOString().slice(0, 7);
+                const [recipesData, listData] = await Promise.all([getRecipes(), getShoppingList(currentMonth)]);
                 setRecipes(recipesData || []);
                 setShoppingList(listData || []);
             } catch (e) {
