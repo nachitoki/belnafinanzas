@@ -32,7 +32,11 @@ def _parse_cost(value: str) -> float:
 def _parse_ingredients(value: str) -> list[str]:
     if not value:
         return []
-    parts = [p.strip() for p in value.split(",") if p.strip()]
+    
+    # Split by common separators: comma, semicolon, pipe, newline
+    raw_parts = re.split(r'[,;|\n]', str(value))
+    parts = [p.strip() for p in raw_parts if p.strip()]
+    
     result = []
     for p in parts:
         p = p.replace("@", "").strip()

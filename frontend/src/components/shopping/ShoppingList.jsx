@@ -121,16 +121,9 @@ const ShoppingList = ({ mode = 'list' }) => {
     useEffect(() => {
         const loadMeals = async () => {
             try {
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = now.getMonth();
-                
-                // Fetch a wider range to catch planned meals that might be in a different year/month perspective
-                const start = new Date(year, month - 3, 1);
-                const end = new Date(year, month + 3, 0);
-                
-                const startDate = start.toISOString().slice(0, 10);
-                const endDate = end.toISOString().slice(0, 10);
+                // Fetch a very wide range to catch planned meals regardless of calendar year navigation
+                const startDate = '2024-01-01';
+                const endDate = '2026-12-31';
                 
                 const data = await getMeals(startDate, endDate);
                 if (Array.isArray(data)) {
@@ -679,7 +672,6 @@ const ShoppingList = ({ mode = 'list' }) => {
         if (isAhorro) return;
         if (!plannedIngredients.length) return;
         if (syncingPlanned) return;
-        const now = new Date();
         const syncKey = `shopping_sync_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         let synced = [];
         try {
@@ -688,10 +680,21 @@ const ShoppingList = ({ mode = 'list' }) => {
         } catch (e) {
             synced = [];
         }
+        
         const itemNames = new Set(items.map((i) => normalizeText(i.name || i.product_name || '')));
+        
+        // If the list has no ingredients synced yet, we ignore the local synced history to allow re-creation
+        const currentIngredientsCount = Array.from(itemNames.values()).filter(n => plannedByKey.has(n)).length;
+        const autoSyncedCount = Array.from(itemNames.values()).filter(n => autoPlannedSet.has(n)).length;
+        
         const toAdd = plannedIngredients.filter((entry) => {
             const n = entry.key;
-            return n && !itemNames.has(n) && !synced.includes(n);
+            const notInList = n && !itemNames.has(n);
+            const neverSyncedThisSession = !synced.includes(n);
+            
+            // Re-sync if it's missing from current view and NOT in the list
+            if (currentIngredientsCount === 0 && notInList) return true;
+            return notInList && neverSyncedThisSession;
         });
         const toUpdate = items
             .map((item) => {
